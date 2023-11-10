@@ -1,6 +1,6 @@
 <div align="center">
     <a href="https://github.com/dia-exercise/ERPub/actions/workflows/ci.yml" rel="nofollow">
-        <img src="https://github.com/dia-exercise/ERPub/actions/workflows/tests.yml/badge.svg" alt="CI" />
+        <img src="https://github.com/dia-exercise/ERPub/actions/workflows/ci.yml/badge.svg" alt="CI" />
     </a>
     <a href="https://github.com/dia-exercise/ERPub/blob/main/LICENSE" rel="nofollow">
         <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License" />
