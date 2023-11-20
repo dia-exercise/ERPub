@@ -6,6 +6,7 @@ from pathlib import Path
 
 logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
 
+
 def download_input(url, target_dir):
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
@@ -33,6 +34,7 @@ def set_dict_value(dict_: dict, key, value):
         raise Exception(f"Key {key} already exists")
     else:
         dict_[key] = value
+
 
 def read_txt(input_file: str) -> list[dict]:
     current_block = {}
