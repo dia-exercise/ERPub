@@ -29,7 +29,7 @@ def download_input(url, target_dir):
         file.extractall(target_dir)
 
 
-def set_dict_value(dict_: dict, key, value):
+def set_dict_value(dict_: dict, key: str, value: str) -> None:
     if dict_.get(key):
         raise Exception(f"Key {key} already exists")
     else:
@@ -37,7 +37,7 @@ def set_dict_value(dict_: dict, key, value):
 
 
 def read_txt(input_file: str) -> list[dict]:
-    current_block = {}
+    current_block: dict[str, str] = {}
     filtered_blocks = []
 
     logging.info(f"Start reading {input_file}")
@@ -74,7 +74,7 @@ def read_txt(input_file: str) -> list[dict]:
     return filtered_blocks
 
 
-def write_csv(blocks: list[dict], target_dir: str, output_file: str):
+def write_csv(blocks: list[dict], target_dir: str, output_file: str) -> None:
     Path(target_dir).mkdir(parents=True, exist_ok=True)
 
     target_path = f"{target_dir}/{output_file}"
