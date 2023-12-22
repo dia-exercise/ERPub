@@ -1,7 +1,7 @@
 import glob
 import logging
 import os
-from typing import Callable, Sequence, Iterable
+from typing import Callable, Iterable, Sequence
 
 import pandas as pd
 
