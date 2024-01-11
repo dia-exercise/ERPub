@@ -1,8 +1,10 @@
 import glob
 import logging
 import os
-from typing import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
+from statistics import fmean
 
+import numpy as np
 import pandas as pd
 
 from erpub.pipeline.blocking import naive_all_pairs
@@ -11,6 +13,13 @@ from erpub.pipeline.matching import jaccard_similarity
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
+DEFAULT_ATTRIBUTES = [
+    "paper_title",
+    "author_names",
+    "publication_venue",
+    "year_of_publication",
+]
+
 
 class Pipeline:
     def __init__(
@@ -18,9 +27,9 @@ class Pipeline:
         file_dir: str,
         preprocess_data_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
         blocking_fn: Callable[[Sequence], Iterable[tuple[int]]] = naive_all_pairs,
-        matching_fn: Callable[
-            [Sequence[str], Sequence[str]], float
-        ] = jaccard_similarity,
+        matching_fns: dict[str, Callable[[str, str], float]] = {
+            attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES
+        },
         clustering_fn: Callable[
             [Iterable[Sequence[int]], Iterable[float], int], Sequence[Iterable[int]]
         ] = connected_components_,
@@ -28,7 +37,7 @@ class Pipeline:
         self.df = Pipeline.load_data(file_dir)
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
-        self.matching_fn = matching_fn
+        self.matching_fns = matching_fns
         self.clustering_fn = clustering_fn
         logging.info("Pipeline initialized")
 
@@ -50,23 +59,36 @@ class Pipeline:
         Execute the entity resolution pipeline.
         """
         if self.preprocess_data_fn:
+            logging.info("Data will be preprocessed")
             self.df = self.preprocess_data_fn(self.df)
-            logging.info("Data has been preprocessed")
         else:
             logging.info("Preprocessing has been skipped")
-        self.pairs = self.blocking_fn(self.df)
+
         logging.info(
-            f"Created list of pairs through blocking function {self.blocking_fn.__name__}"
+            f"Create list of pairs through blocking function {self.blocking_fn.__name__}"
         )
-        self.sims = [
-            self.matching_fn(self.df.iloc[a], self.df.iloc[b]) for a, b in self.pairs
-        ]
+        self.pairs = self.blocking_fn(self.df)
+
+        logging.info("Calculate similarities of pairs")
+        for attr, f in self.matching_fns.items():
+            logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
+        self.sims = np.array(
+            [
+                fmean(
+                    [
+                        match_f(self.df.iloc[a][attr], self.df.iloc[b][attr])
+                        for attr, match_f in self.matching_fns.items()
+                    ]
+                )
+                for a, b in self.pairs
+            ]
+        )
+
         logging.info(
-            f"Calculated similarities of pairs with matching function {self.matching_fn.__name__}"
+            f"Deduplicate data into clusters using clustering function {self.clustering_fn.__name__}"
         )
         self.clusters = self.clustering_fn(
             pairs=self.pairs, sims=self.sims, n=len(self.df)
         )
-        logging.info(
-            f"Deduplicated data into clusters clustering function {self.clustering_fn.__name__}"
-        )
+
+        return self

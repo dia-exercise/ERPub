@@ -1,14 +1,9 @@
-from typing import Sequence
-
-
-def jaccard_similarity(a: Sequence[str], b: Sequence[str]) -> float:
+def jaccard_similarity(a: str, b: str) -> float:
     """
-    Calculate the average Jaccard Similarity across multiple attributes.
+    Calculate the average Jaccard Similarity across a given attribute.
     """
-    score = 0.0
-    for a_attr, b_attr in zip(a, b):
-        A, B = set(a_attr.split()), set(b_attr.split())
-        intersection = A.intersection(B)
-        union = A.union(B)
-        score += len(intersection) / len(union)
-    return score / len(a)
+    A, B = set(a.split()), set(b.split())
+    intersection = A.intersection(B)
+    union = A.union(B)
+    score = len(intersection) / len(union)
+    return score
