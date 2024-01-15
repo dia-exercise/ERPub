@@ -25,60 +25,88 @@ class Pipeline:
     def __init__(
         self,
         file_dir: str,
-        match_dir: str,
-        resolved_files_dir: str,
         similarity_threshold: float,
         preprocess_data_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
-        blocking_fn: Callable[[Sequence], Iterable[tuple[int, int]]] = naive_all_pairs,
+        blocking_fn: Callable[[Sequence], np.ndarray] = naive_all_pairs,
         matching_fns: dict[str, Callable[[str, str], float]] = {
             attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES
         },
-        cluster_matched_entities : bool = False
     ):
         self.df = Pipeline.load_data(file_dir)
-        self.match_dir = match_dir
-        self.resolved_files_dir = resolved_files_dir
         self.similarity_threshold = similarity_threshold
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
-        self.cluster_matched_entities = cluster_matched_entities
-        self.pairs_to_match = None
-        self.similarity_scores = None
-        self.matched_df = None
         logging.info("Pipeline initialized")
 
     @staticmethod
-    def load_data(dir: str) -> pd.DataFrame:
-        """Load all csv files in the specified directory into a single pandas DataFrame."""
-        all_files = glob.glob(os.path.join(dir, "*.csv"))
+    def load_data(file_dir: str) -> pd.DataFrame:
+        """Load all csv files in the specified directory into a single pandas DataFrame.
+        
+        Parameters
+        ----------
+        file_dir : str
+            Directory path containing the csv files created by data_preparation.py
+
+        Returns
+        ----------
+        df : pd.DataFrame
+            All the csv files contained in file_dir as a single pandas DataFrame with a column "dataset" containing the name of the file. 
+        """
+        all_files = glob.glob(os.path.join(file_dir, "*.csv"))
         logging.info(f"The pipeline will be built with these files: {all_files}")
-        df = pd.concat((pd.read_csv(f).assign(dataset=f) for f in all_files), ignore_index=True).astype(str)
+        df = pd.concat(
+            (pd.read_csv(f).assign(dataset=f) for f in all_files), ignore_index=True
+        ).astype(str)
         logging.info("Loaded csv successfully into pandas dataframe")
         return df
-    
-    def _write_matched_entities_csv(self, matched_pairs: Iterable[tuple[int, int]]) -> None:
-        """Writes for each match between entities from different datasets an entry to the match_dir."""
-        unique_datasets = self.df.dataset.unique()
-        match_ids: list[dict[str, str]] = [self.df.iloc[match].set_index('dataset').paper_id.to_dict() for match in matched_pairs if len(self.df.iloc[match].dataset.unique()) == len(unique_datasets)]
-        if self.match_dir:
-            run_dir = self._get_run_directory()
-            Path(run_dir).mkdir(parents=True, exist_ok=True)
-            pd.DataFrame(match_ids).to_csv(os.path.join(run_dir, "matched_entities.csv"), index=False)
-            with open(os.path.join(run_dir, 'pipeline_settings.txt'), 'w') as file:
-                file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
-                for attr, f in self.matching_fns.items():
-                    file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
-                file.write(f"Similarity threshold: {self.similarity_threshold}\n")
-    
-    def _get_run_directory(self) -> str:
-        """Identifies what was the last run of the pipeline and returns the new dir name of the current run."""
-        existing_runs = [d for d in os.listdir(self.match_dir) if d.isdigit()]
-        next_run_number = str(max(existing_runs) + 1) if existing_runs else "0"
-        return os.path.join(self.match_dir, next_run_number)
 
-    def _cluster_matched_entities(self, matched_pairs: Iterable[tuple[int, int]]) -> list[set[int]]:
-        """Clusters the matched_pairs."""
+    def _write_matched_entities_csv(
+        self, matched_pairs: np.ndarray, dir_name: str
+    ) -> None:
+        """Writes for each match between entities from different datasets
+        an entry to the match_dir.
+        
+        Parameters
+        ----------
+        matched_pairs : ndarray(dtype=int64, ndim=2)
+            Array of size matched_pairs x 2 containing the indices for each pair as a row.
+        dir_name : str
+            Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        """
+        unique_datasets = self.df.dataset.unique()
+        match_ids: list[dict[str, str]] = [
+            self.df.iloc[match].set_index("dataset").paper_id.to_dict()
+            for match in matched_pairs
+            if len(self.df.iloc[match].dataset.unique()) == len(unique_datasets)
+        ]
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(match_ids).to_csv(
+            os.path.join(dir_name, "matched_entities.csv"), index=False
+        )
+        with open(
+            os.path.join(dir_name, "pipeline_settings.txt"), "w", encoding="utf-8"
+        ) as file:
+            file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
+            for attr, f in self.matching_fns.items():
+                file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
+            file.write(f"Similarity threshold: {self.similarity_threshold}\n")
+
+    def _cluster_matched_entities(
+        self, matched_pairs: Iterable[tuple[int, int]]
+    ) -> list[set[int]]:
+        """Clusters the matched_pairs.
+                
+        Parameters
+        ----------
+        matched_pairs : ndarray(dtype=int64, ndim=2)
+            Array of size matched_pairs x 2 containing the indices for each pair as a row.
+
+        Returns
+        ----------
+        clusters : list[set[int]]
+            A list of clusters where each cluster is a set of the indices.
+        """
         clusters: list[set[int]] = []
         for a, b in matched_pairs:
             updated_cluster = False
@@ -90,24 +118,44 @@ class Pipeline:
 
             if not updated_cluster:
                 clusters.append({a, b})
-        
+
         return clusters
-    
-    def _write_resolved_data(self, clusters: list[set[int]]):
-        """Based on the clusters removes all found duplicates from all datasets and writes the updated csv to the resolved_files_dir."""
+
+    def _write_resolved_data(self, clusters: list[set[int]], dir_name: str) -> None:
+        """Based on the clusters removes all found duplicates from all datasets
+        and writes the updated csv to the resolved_files_dir.
+
+        Parameters
+        ----------
+        clusters : list(set[int])
+            A list of clusters where each cluster is a set of the indices.
+        dir_name : str
+            Directory path where the resolved csv files will be put.
+        """
         df = self.df.copy()
         all_columns = DEFAULT_ATTRIBUTES + ["paper_id"]
         for cluster in clusters:
             cluster_list = list(cluster)
-            df.loc[cluster_list, all_columns] = df.loc[cluster_list[0], all_columns].values
+            df.loc[cluster_list, all_columns] = df.loc[
+                cluster_list[0], all_columns
+            ].values
         df = df.drop_duplicates()
-        Path(self.resolved_files_dir).mkdir(parents=True, exist_ok=True)
+        Path(dir_name).mkdir(parents=True, exist_ok=True)
         for dataset in df.dataset.unique():
             dataset_df = df[df["dataset"] == dataset][all_columns]
-            dataset_df.to_csv(os.path.join(self.resolved_files_dir, "resolved_" + dataset.split("/")[-1]), index=False)
+            dataset_df.to_csv(
+                os.path.join(dir_name, "resolved_" + dataset.split("/")[-1]),
+                index=False,
+            )
 
-    def run(self):
-        """Execute the entity resolution pipeline."""
+    def run(self, dir_name: str) -> None:
+        """Execute the entity resolution pipeline.
+                
+        Parameters
+        ----------
+        dir_name : str
+            Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        """
         if self.preprocess_data_fn:
             logging.info("Data will be preprocessed")
             self.df = self.preprocess_data_fn(self.df)
@@ -132,12 +180,26 @@ class Pipeline:
                 for a, b in self.pairs_to_match
             ]
         )
-        matched_pairs = self.pairs_to_match[self.similarity_scores > self.similarity_threshold]
-        logging.info("Writing the matched paper_ids to directory %s", self.match_dir)
-        self._write_matched_entities_csv(matched_pairs)
+        self.matched_pairs = self.pairs_to_match[
+            self.similarity_scores > self.similarity_threshold
+        ]
+        logging.info("Writing the matched paper_ids to directory {dir_name}")
+        self._write_matched_entities_csv(self.matched_pairs, dir_name)
 
-        if self.cluster_matched_entities:
+    def resolve(self, dir_name: str) -> None:
+        """Resolves the matched entities and writing the new data to dir_name.
+                
+        Parameters
+        ----------
+        dir_name : str
+            Directory path where the resolved csv files will be put.
+        """
+        if self.matched_pairs:
             logging.info("Clustering matched entities")
-            clusters = self._cluster_matched_entities(matched_pairs)
-            logging.info("Writing the resolved dataset to directory %s", self.resolved_files_dir)
-            self._write_resolved_data(clusters)
+            clusters = self._cluster_matched_entities(self.matched_pairs)
+            logging.info("Writing the resolved dataset to directory {dir_name}")
+            self._write_resolved_data(clusters, dir_name)
+        else:
+            logging.warning(
+                "Before resolving the entities you need to first have a succesful pipeline run"
+            )
