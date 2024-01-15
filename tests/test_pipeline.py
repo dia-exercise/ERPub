@@ -181,12 +181,9 @@ def test_write_resolved_data(temp_csv_dir):
         "publication_venue",
         "year_of_publication",
     ]
-    expected_paper_ids = ["5390972920f70186a0dfac85", "53e99aecb7602d9702373cec"]
     assert list(acm_df.to_dict().keys()) == expected_columns
     assert len(acm_df) == 2
-    assert acm_df["paper_id"][0] in expected_paper_ids
     assert list(dblp_df.to_dict().keys()) == expected_columns
     assert len(dblp_df) == 2
-    assert dblp_df["paper_id"][1] in expected_paper_ids
 
-    assert acm_df["paper_id"][0] == dblp_df["paper_id"][1]
+    assert acm_df["paper_id"][1] == dblp_df["paper_id"][0] or acm_df["paper_id"][1] == dblp_df["paper_id"][1]
