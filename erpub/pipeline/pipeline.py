@@ -32,15 +32,16 @@ class Pipeline:
             attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES
         },
     ):
-        self.df = Pipeline.load_data(file_dir)
+        self.df = Pipeline._load_data(file_dir)
         self.similarity_threshold = similarity_threshold
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
+        self.matched_pairs: np.ndarray | None = None
         logging.info("Pipeline initialized")
 
     @staticmethod
-    def load_data(file_dir: str) -> pd.DataFrame:
+    def _load_data(file_dir: str) -> pd.DataFrame:
         """Load all csv files in the specified directory into a single pandas DataFrame.
         
         Parameters
@@ -92,9 +93,8 @@ class Pipeline:
                 file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
             file.write(f"Similarity threshold: {self.similarity_threshold}\n")
 
-    def _cluster_matched_entities(
-        self, matched_pairs: Iterable[tuple[int, int]]
-    ) -> list[set[int]]:
+    @staticmethod
+    def _cluster_matched_entities(matched_pairs: Iterable[tuple[int, int]]) -> list[set[int]]:
         """Clusters the matched_pairs.
                 
         Parameters
@@ -133,7 +133,7 @@ class Pipeline:
             Directory path where the resolved csv files will be put.
         """
         df = self.df.copy()
-        all_columns = DEFAULT_ATTRIBUTES + ["paper_id"]
+        all_columns = ["paper_id"] + DEFAULT_ATTRIBUTES
         for cluster in clusters:
             cluster_list = list(cluster)
             df.loc[cluster_list, all_columns] = df.loc[
@@ -165,11 +165,11 @@ class Pipeline:
         logging.info(
             f"Create list of pairs through blocking function {self.blocking_fn.__name__}"
         )
-        self.pairs_to_match = self.blocking_fn(self.df)
-        logging.info(f"Calculate similarities of {len(self.pairs_to_match)} pairs")
+        pairs_to_match = self.blocking_fn(self.df)
+        logging.info(f"Calculate similarities of {len(pairs_to_match)} pairs")
         for attr, f in self.matching_fns.items():
             logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
-        self.similarity_scores = np.array(
+        similarity_scores = np.array(
             [
                 fmean(
                     [
@@ -177,11 +177,11 @@ class Pipeline:
                         for attr, match_f in self.matching_fns.items()
                     ]
                 )
-                for a, b in self.pairs_to_match
+                for a, b in pairs_to_match
             ]
         )
-        self.matched_pairs = self.pairs_to_match[
-            self.similarity_scores > self.similarity_threshold
+        self.matched_pairs = pairs_to_match[
+            similarity_scores > self.similarity_threshold
         ]
         logging.info("Writing the matched paper_ids to directory {dir_name}")
         self._write_matched_entities_csv(self.matched_pairs, dir_name)
@@ -194,12 +194,12 @@ class Pipeline:
         dir_name : str
             Directory path where the resolved csv files will be put.
         """
-        if self.matched_pairs:
-            logging.info("Clustering matched entities")
-            clusters = self._cluster_matched_entities(self.matched_pairs)
-            logging.info("Writing the resolved dataset to directory {dir_name}")
-            self._write_resolved_data(clusters, dir_name)
-        else:
+        if self.matched_pairs is None:
             logging.warning(
                 "Before resolving the entities you need to first have a succesful pipeline run"
             )
+        else:
+            logging.info("Clustering matched entities")
+            clusters = Pipeline._cluster_matched_entities(self.matched_pairs)
+            logging.info("Writing the resolved dataset to directory {dir_name}")
+            self._write_resolved_data(clusters, dir_name)
