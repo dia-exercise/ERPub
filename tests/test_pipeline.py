@@ -169,7 +169,7 @@ def test_write_resolved_data(temp_csv_dir):
     clusters = [{0, 3, 5, 7}]
     resolved_dir = os.path.join(temp_csv_dir, "my_dir")
     pipeline._write_resolved_data(clusters, resolved_dir)
-    assert ["resolved_dblp_sample.csv", "resolved_acm_sample.csv"] == (
+    assert ["resolved_acm_sample.csv", "resolved_dblp_sample.csv"] == sorted(
         os.listdir(resolved_dir)
     )
     acm_df = pd.read_csv(os.path.join(resolved_dir, "resolved_acm_sample.csv"))
@@ -188,3 +188,5 @@ def test_write_resolved_data(temp_csv_dir):
     assert list(dblp_df.to_dict().keys()) == expected_columns
     assert len(dblp_df) == 2
     assert dblp_df["paper_id"][1] in expected_paper_ids
+
+    assert acm_df["paper_id"][0] == dblp_df["paper_id"][1]

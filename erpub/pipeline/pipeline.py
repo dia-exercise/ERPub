@@ -43,7 +43,7 @@ class Pipeline:
     @staticmethod
     def _load_data(file_dir: str) -> pd.DataFrame:
         """Load all csv files in the specified directory into a single pandas DataFrame.
-        
+
         Parameters
         ----------
         file_dir : str
@@ -52,7 +52,8 @@ class Pipeline:
         Returns
         ----------
         df : pd.DataFrame
-            All the csv files contained in file_dir as a single pandas DataFrame with a column "dataset" containing the name of the file. 
+            All the csv files contained in file_dir as a single pandas DataFrame
+            with a column "dataset" containing the name of the file.
         """
         all_files = glob.glob(os.path.join(file_dir, "*.csv"))
         logging.info(f"The pipeline will be built with these files: {all_files}")
@@ -67,7 +68,7 @@ class Pipeline:
     ) -> None:
         """Writes for each match between entities from different datasets
         an entry to the match_dir.
-        
+
         Parameters
         ----------
         matched_pairs : ndarray(dtype=int64, ndim=2)
@@ -96,7 +97,7 @@ class Pipeline:
     @staticmethod
     def _cluster_matched_entities(matched_pairs: Iterable[tuple[int, int]]) -> list[set[int]]:
         """Clusters the matched_pairs.
-                
+
         Parameters
         ----------
         matched_pairs : ndarray(dtype=int64, ndim=2)
@@ -150,7 +151,7 @@ class Pipeline:
 
     def run(self, dir_name: str) -> None:
         """Execute the entity resolution pipeline.
-                
+
         Parameters
         ----------
         dir_name : str
@@ -188,7 +189,7 @@ class Pipeline:
 
     def resolve(self, dir_name: str) -> None:
         """Resolves the matched entities and writing the new data to dir_name.
-                
+
         Parameters
         ----------
         dir_name : str
