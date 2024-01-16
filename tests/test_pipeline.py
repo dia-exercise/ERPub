@@ -4,8 +4,24 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 import pytest
+from erpub.pipeline.matching import vector_embeddings
 
 from erpub.pipeline.pipeline import Pipeline
+
+
+@pytest.fixture
+def temp_embeddings_dir():
+    "Creates a temp directory with a embeddings file"
+    with TemporaryDirectory() as temp_dir:
+        embeddings_dir = os.path.join(temp_dir, "sample_embeddings.txt")
+        with open(embeddings_dir, "w") as f:
+            f.write(
+                "foo 0.418 0.24968 -0.41242 0.1217 0.34527 -0.044457 -0.49688 -0.17862 -0.00066023 -0.6566\n"
+            )
+            f.write(
+                "bar 0.013441 0.23682 -0.16899 0.40951 0.63812 0.47709 -0.42852 -0.55641 -0.364 -0.23938\n"
+            )
+        yield embeddings_dir
 
 
 @pytest.fixture
@@ -86,3 +102,24 @@ def test_default_pipeline(temp_csv_dir):
         0.66923077,
     )
     assert expected_match in [list(elem) for elem in pipeline.clusters]
+
+    assert pipeline.embedding_table is None
+
+
+def test_get_embedding_table(temp_embeddings_dir):
+    embeddings_table = Pipeline._get_embedding_table(temp_embeddings_dir)
+    assert len(embeddings_table) == 2
+    assert list(embeddings_table.keys()) == ["foo", "bar"]
+    assert all(arr.shape == (10,) for arr in embeddings_table.values())
+    assert type(embeddings_table["unknown"]) is np.ndarray
+
+
+def test_is_embedding_table_required(mocker):
+    mocker.patch.object(Pipeline, "__init__", return_value=None)
+    pipeline = Pipeline()
+
+    pipeline.matching_fns = {"author_names": lambda a, b, embedding_table: 5}
+    assert pipeline._is_embedding_table_required()
+
+    pipeline.matching_fns = {"author_names": lambda a, b, embedding_table=None: 5}
+    assert not pipeline._is_embedding_table_required()

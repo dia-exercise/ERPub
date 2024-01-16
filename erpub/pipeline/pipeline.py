@@ -1,8 +1,10 @@
 import glob
 import logging
 import os
+import inspect
 from collections.abc import Callable, Iterable, Sequence
 from statistics import fmean
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -33,12 +35,23 @@ class Pipeline:
         clustering_fn: Callable[
             [Iterable[Sequence[int]], Iterable[float], int], Sequence[Iterable[int]]
         ] = connected_components_,
+        embeddings_for_matching: str | None = None,
     ):
         self.df = Pipeline.load_data(file_dir)
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
         self.clustering_fn = clustering_fn
+        if embeddings_for_matching is None:
+            if self._is_embedding_table_required():
+                raise ValueError(
+                    "Missing required parameter 'embeddings_for_matching' as one of the matching functions require them"
+                )
+            self.embedding_table = None
+        else:
+            self.embedding_table = Pipeline._get_embedding_table(
+                embeddings_for_matching
+            )
         logging.info("Pipeline initialized")
 
     @staticmethod
@@ -53,6 +66,39 @@ class Pipeline:
         )
         logging.info("Loaded csv successfully into pandas dataframe")
         return df
+
+    @staticmethod
+    def _get_embedding_table(path: str) -> defaultdict[str, np.ndarray]:
+        """Build the embedding table as default dict with a random ndarray as default
+
+        Parameters
+        ----------
+        path: str
+            The path of the embeddings txt file (e.g. "glove.6B.50d.txt")
+
+        Returns
+        ----------
+        embeddings_dict: defaultdict[str, np.ndarray]
+            The embeddings mapping from word to vector
+            and on unkown word returning a random vector
+        """
+        embeddings_dict = {}
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], "float32")
+                embeddings_dict[word] = vector
+        default_vector = np.random.rand(*vector.shape)
+        return defaultdict(lambda: default_vector, embeddings_dict)
+
+    def _is_embedding_table_required(self) -> bool:
+        """Checks all matching functions whether they require a embedding_table"""
+        for matching_f in self.matching_fns.values():
+            parameters = inspect.signature(matching_f).parameters
+            if parameters["embedding_table"].default is inspect.Parameter.empty:
+                return True
+        return False
 
     def run(self):
         """
@@ -76,7 +122,11 @@ class Pipeline:
             [
                 fmean(
                     [
-                        match_f(self.df.iloc[a][attr], self.df.iloc[b][attr])
+                        match_f(
+                            self.df.iloc[a][attr],
+                            self.df.iloc[b][attr],
+                            self.embedding_table,
+                        )
                         for attr, match_f in self.matching_fns.items()
                     ]
                 )
