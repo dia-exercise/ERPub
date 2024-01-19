@@ -107,6 +107,7 @@ class Pipeline:
 
     @staticmethod
     def _requires_embedding_table(match_f: Callable) -> bool:
+        "Returns True if the passed match_f requires embedding_table as it's argument, else False"
         return "embedding_table" in inspect.signature(match_f).parameters
 
     def _write_matched_entities_csv(
@@ -198,6 +199,16 @@ class Pipeline:
             )
 
     def _get_similarity_scores(self, pairs_to_match: np.ndarray) -> np.ndarray:
+        """Calculates the average similarity score over matching_fns.
+        Parameters
+        ----------
+        pairs_to_match : ndarray(dtype=int64, ndim=2)
+            Array of size #pairs x 2 containing the indices for each pair as a row.
+        Returns
+        ----------
+        similarity_score : ndarray(dtype=float64, ndim=0)
+            Array containing the similarity scores for each pair.
+        """
         similarity_scores = []
         for attr, match_f in self.matching_fns_vec.items():
             attr_df = self.df[attr]
