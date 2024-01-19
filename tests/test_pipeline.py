@@ -73,9 +73,9 @@ def temp_csv_dir():
 
 def test_default_pipeline(temp_csv_dir, mocker):
     "Tests the dimensions and whether the matched_entities is created"
-    pipeline = Pipeline(file_dir=temp_csv_dir, similarity_threshold=0.6)
+    pipeline = Pipeline(file_dir=temp_csv_dir)
     mocker.patch.object(pipeline, "_write_matched_entities_csv")
-    pipeline.run("blub")
+    pipeline.run(dir_name="blub", similarity_threshold=0.6)
 
     assert np.allclose(pipeline.matched_pairs, np.array([[1, 2]]))
 
@@ -96,7 +96,6 @@ def test_load_data(temp_csv_dir):
 def test_write_matched_entities_csv(temp_csv_dir):
     pipeline = Pipeline(
         file_dir=temp_csv_dir,
-        similarity_threshold=0.6,
         blocking_fn=naive_all_pairs,
         matching_fns={
             attr: jaccard_similarity
@@ -110,7 +109,7 @@ def test_write_matched_entities_csv(temp_csv_dir):
     )
     matched_pairs = np.array([[0, 3]])
     run_dir = os.path.join(temp_csv_dir, "my_dir")
-    pipeline._write_matched_entities_csv(matched_pairs, run_dir)
+    pipeline._write_matched_entities_csv(matched_pairs, run_dir, 0.6)
 
     run_dir_contents = os.listdir(run_dir)
     assert (
@@ -135,9 +134,22 @@ def test_cluster_matched_entities():
     assert clusters[0] == {0, 1, 7}
     assert clusters[1] == {4, 6}
 
+def test_get_similarity_scores(mocker):
+    mocker.patch.object(Pipeline, "_load_data")
+    pipeline = Pipeline("foo")
+
+    pipeline.df = pd.DataFrame({"paper_title": ["this is foo", "this is foo", "something else"],"author_names": ["Mr Foo", "Mr Bar", "Someone else"]})
+    pipeline.matching_fns = {attr:np.vectorize(jaccard_similarity) for attr in ["paper_title", "author_names"]}
+    pairs_to_match = np.array([[0,1], [0,2], [1,2]])
+    
+    scores = pipeline._get_similarity_scores(pairs_to_match)
+    assert len(scores) == len(pairs_to_match)
+    assert all(scores >= 0)
+    assert scores[0] > 0.6
+
 
 def test_pipeline_resolve_without_run(temp_csv_dir, mocker):
-    pipeline = Pipeline(file_dir=temp_csv_dir, similarity_threshold=0.5)
+    pipeline = Pipeline(file_dir=temp_csv_dir)
     mocker.patch.object(Pipeline, "_cluster_matched_entities")
     mocker.patch.object(pipeline, "_write_resolved_data")
 
@@ -149,13 +161,13 @@ def test_pipeline_resolve_without_run(temp_csv_dir, mocker):
 
 
 def test_pipeline_resolve(temp_csv_dir, mocker):
-    pipeline = Pipeline(file_dir=temp_csv_dir, similarity_threshold=0.5)
+    pipeline = Pipeline(file_dir=temp_csv_dir)
 
     mocker.patch.object(Pipeline, "_cluster_matched_entities")
     mocker.patch.object(pipeline, "_write_resolved_data")
 
     run_dir = os.path.join(temp_csv_dir, "my_run")
-    pipeline.run(run_dir)
+    pipeline.run(run_dir, similarity_threshold=0.5)
     resolve_dir = os.path.join(temp_csv_dir, "resolved_data")
     pipeline.resolve(resolve_dir)
 
@@ -164,7 +176,7 @@ def test_pipeline_resolve(temp_csv_dir, mocker):
 
 
 def test_write_resolved_data(temp_csv_dir):
-    pipeline = Pipeline(file_dir=temp_csv_dir, similarity_threshold=0.5)
+    pipeline = Pipeline(file_dir=temp_csv_dir)
     pipeline.df = pd.concat([pipeline.df, pipeline.df], ignore_index=True)
     clusters = [{0, 3, 5, 7}]
     resolved_dir = os.path.join(temp_csv_dir, "my_dir")

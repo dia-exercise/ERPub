@@ -3,7 +3,6 @@ import logging
 import os
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from statistics import fmean
 
 import numpy as np
 import pandas as pd
@@ -25,7 +24,6 @@ class Pipeline:
     def __init__(
         self,
         file_dir: str,
-        similarity_threshold: float,
         preprocess_data_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
         blocking_fn: Callable[[Sequence], np.ndarray] = naive_all_pairs,
         matching_fns: dict[str, Callable[[str, str], float]] = {
@@ -33,10 +31,11 @@ class Pipeline:
         },
     ):
         self.df = Pipeline._load_data(file_dir)
-        self.similarity_threshold = similarity_threshold
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
-        self.matching_fns = matching_fns
+        self.matching_fns: dict[
+            str, Callable[[Sequence[str], Sequence[str]], float]
+        ] = {attr: np.vectorize(match_f) for attr, match_f in matching_fns.items()}
         self.matched_pairs: np.ndarray | None = None
         logging.info("Pipeline initialized")
 
@@ -64,7 +63,7 @@ class Pipeline:
         return df
 
     def _write_matched_entities_csv(
-        self, matched_pairs: np.ndarray, dir_name: str
+        self, matched_pairs: np.ndarray, dir_name: str, similarity_threshold: float
     ) -> None:
         """Writes for each match between entities from different datasets
         an entry to the match_dir.
@@ -92,10 +91,12 @@ class Pipeline:
             file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
             for attr, f in self.matching_fns.items():
                 file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
-            file.write(f"Similarity threshold: {self.similarity_threshold}\n")
+            file.write(f"Similarity threshold: {similarity_threshold}\n")
 
     @staticmethod
-    def _cluster_matched_entities(matched_pairs: Iterable[tuple[int, int]]) -> list[set[int]]:
+    def _cluster_matched_entities(
+        matched_pairs: Iterable[tuple[int, int]]
+    ) -> list[set[int]]:
         """Clusters the matched_pairs.
 
         Parameters
@@ -149,7 +150,28 @@ class Pipeline:
                 index=False,
             )
 
-    def run(self, dir_name: str) -> None:
+    def _get_similarity_scores(self, pairs_to_match: np.ndarray) -> np.ndarray:
+        """Calculates the average similarity score over matching_fns.
+
+        Parameters
+        ----------
+        pairs_to_match : ndarray(dtype=int64, ndim=2)
+            Array of size #pairs x 2 containing the indices for each pair as a row.
+
+        Returns
+        ----------
+        similarity_score : ndarray(dtype=float64, ndim=0)
+            Array containing the similarity scores for each pair.
+        """
+        similarity_scores = []
+        for attr, match_f in self.matching_fns.items():
+            attr_df = self.df[attr]
+            a = attr_df.iloc[pairs_to_match[:, 0]]
+            b = attr_df.iloc[pairs_to_match[:, 1]]
+            similarity_scores.append(match_f(a, b))
+        return np.mean(similarity_scores, axis=0)
+
+    def run(self, dir_name: str, similarity_threshold: float) -> None:
         """Execute the entity resolution pipeline.
 
         Parameters
@@ -170,22 +192,13 @@ class Pipeline:
         logging.info(f"Calculate similarities of {len(pairs_to_match)} pairs")
         for attr, f in self.matching_fns.items():
             logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
-        similarity_scores = np.array(
-            [
-                fmean(
-                    [
-                        match_f(self.df.iloc[a][attr], self.df.iloc[b][attr])
-                        for attr, match_f in self.matching_fns.items()
-                    ]
-                )
-                for a, b in pairs_to_match
-            ]
-        )
+        similarity_scores = self._get_similarity_scores(pairs_to_match)
+        logging.info(f"Using similarity threshold of {similarity_threshold}")
         self.matched_pairs = pairs_to_match[
-            similarity_scores > self.similarity_threshold
+            similarity_scores > similarity_threshold
         ]
-        logging.info("Writing the matched paper_ids to directory {dir_name}")
-        self._write_matched_entities_csv(self.matched_pairs, dir_name)
+        logging.info(f"Writing the matched paper_ids to directory {dir_name}")
+        self._write_matched_entities_csv(self.matched_pairs, dir_name, similarity_threshold)
 
     def resolve(self, dir_name: str) -> None:
         """Resolves the matched entities and writing the new data to dir_name.
@@ -202,5 +215,5 @@ class Pipeline:
         else:
             logging.info("Clustering matched entities")
             clusters = Pipeline._cluster_matched_entities(self.matched_pairs)
-            logging.info("Writing the resolved dataset to directory {dir_name}")
+            logging.info(f"Writing the resolved dataset to directory {dir_name}")
             self._write_resolved_data(clusters, dir_name)
