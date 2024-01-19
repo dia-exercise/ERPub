@@ -53,7 +53,12 @@ class Pipeline:
         self.matching_fns = matching_fns
         self.matching_fns_vec: dict[
             str, Callable[[Sequence[str], Sequence[str]], float]
-        ] = {attr: np.vectorize(partial(match_f, embedding_table=self.embedding_table)) if self._requires_embedding_table(match_f) else np.vectorize(match_f) for attr, match_f in matching_fns.items()}
+        ] = {
+            attr: np.vectorize(partial(match_f, embedding_table=self.embedding_table))
+            if self._requires_embedding_table(match_f)
+            else np.vectorize(match_f)
+            for attr, match_f in matching_fns.items()
+        }
         self.matched_pairs: np.ndarray | None = None
         logging.info("Pipeline initialized")
 
@@ -239,11 +244,11 @@ class Pipeline:
         for attr, f in self.matching_fns.items():
             logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
         similarity_scores = self._get_similarity_scores(pairs_to_match)
-        self.matched_pairs = pairs_to_match[
-            similarity_scores > similarity_threshold
-        ]
+        self.matched_pairs = pairs_to_match[similarity_scores > similarity_threshold]
         logging.info("Writing the matched paper_ids to directory {dir_name}")
-        self._write_matched_entities_csv(self.matched_pairs, dir_name, similarity_threshold)
+        self._write_matched_entities_csv(
+            self.matched_pairs, dir_name, similarity_threshold
+        )
 
     def resolve(self, dir_name: str) -> None:
         """Resolves the matched entities and writing the new data to dir_name.
