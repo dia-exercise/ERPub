@@ -29,29 +29,32 @@ class Pipeline:
         file_dir: str,
         preprocess_data_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
         blocking_fn: Callable[[Sequence], Iterable[tuple[int]]] = naive_all_pairs,
-        matching_fns: dict[str, Callable[[str, str], float]] = {
-            attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES
-        },
+        matching_fns: dict[
+            str,
+            Callable[[str, str], float]
+            | Callable[[str, str, dict[str, np.ndarray]], float],
+        ] = {attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES},
         clustering_fn: Callable[
             [Iterable[Sequence[int]], Iterable[float], int], Sequence[Iterable[int]]
         ] = connected_components_,
         embeddings_for_matching: str | None = None,
     ):
         self.df = Pipeline.load_data(file_dir)
+        if embeddings_for_matching is None and any(
+            Pipeline._requires_embedding_table(f) for f in matching_fns.values()
+        ):
+            raise ValueError(
+                "Missing required parameter 'embeddings_for_matching' as one of the matching functions require them"
+            )
+        self.embedding_table = (
+            Pipeline._get_embedding_table(embeddings_for_matching)
+            if embeddings_for_matching
+            else None
+        )
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
         self.clustering_fn = clustering_fn
-        if embeddings_for_matching is None:
-            if self._is_embedding_table_required():
-                raise ValueError(
-                    "Missing required parameter 'embeddings_for_matching' as one of the matching functions require them"
-                )
-            self.embedding_table = None
-        else:
-            self.embedding_table = Pipeline._get_embedding_table(
-                embeddings_for_matching
-            )
         logging.info("Pipeline initialized")
 
     @staticmethod
@@ -92,13 +95,9 @@ class Pipeline:
         default_vector = np.random.rand(*vector.shape)
         return defaultdict(lambda: default_vector, embeddings_dict)
 
-    def _is_embedding_table_required(self) -> bool:
-        """Checks all matching functions whether they require a embedding_table"""
-        for matching_f in self.matching_fns.values():
-            parameters = inspect.signature(matching_f).parameters
-            if parameters["embedding_table"].default is inspect.Parameter.empty:
-                return True
-        return False
+    @staticmethod
+    def _requires_embedding_table(match_f: Callable) -> bool:
+        return "embedding_table" in inspect.signature(match_f).parameters
 
     def run(self):
         """
@@ -127,6 +126,8 @@ class Pipeline:
                             self.df.iloc[b][attr],
                             self.embedding_table,
                         )
+                        if Pipeline._requires_embedding_table(match_f)
+                        else match_f(self.df.iloc[a][attr], self.df.iloc[b][attr])
                         for attr, match_f in self.matching_fns.items()
                     ]
                 )

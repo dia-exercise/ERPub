@@ -2,7 +2,7 @@ import numpy as np
 from scipy.spatial.distance import cosine
 
 
-def jaccard_similarity(a: str, b: str, embedding_table: None = None) -> float:
+def jaccard_similarity(a: str, b: str) -> float:
     """
     Calculate the average Jaccard Similarity across a given attribute.
     """

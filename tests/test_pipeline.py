@@ -1,10 +1,11 @@
+from collections import defaultdict
 import csv
 import os
 from tempfile import TemporaryDirectory
 import numpy as np
 
 import pytest
-from erpub.pipeline.matching import vector_embeddings
+from erpub.pipeline.matching import jaccard_similarity, vector_embeddings
 
 from erpub.pipeline.pipeline import Pipeline
 
@@ -106,6 +107,29 @@ def test_default_pipeline(temp_csv_dir):
     assert pipeline.embedding_table is None
 
 
+def test_pipeline_with_embedding_table(temp_csv_dir, temp_embeddings_dir):
+    pipeline = Pipeline(
+        temp_csv_dir,
+        matching_fns={
+            "paper_title": vector_embeddings,
+            "author_names": jaccard_similarity,
+        },
+        embeddings_for_matching=temp_embeddings_dir,
+    ).run()
+    assert type(pipeline.embedding_table) is defaultdict
+
+
+def test_pipeline_missing_embedding_table_error(temp_csv_dir):
+    with pytest.raises(ValueError) as e:
+        pipeline = Pipeline(
+            temp_csv_dir,
+            matching_fns={
+                "paper_title": vector_embeddings,
+                "author_names": jaccard_similarity,
+            },
+        ).run()
+
+
 def test_get_embedding_table(temp_embeddings_dir):
     embeddings_table = Pipeline._get_embedding_table(temp_embeddings_dir)
     assert len(embeddings_table) == 2
@@ -114,12 +138,6 @@ def test_get_embedding_table(temp_embeddings_dir):
     assert type(embeddings_table["unknown"]) is np.ndarray
 
 
-def test_is_embedding_table_required(mocker):
-    mocker.patch.object(Pipeline, "__init__", return_value=None)
-    pipeline = Pipeline()
-
-    pipeline.matching_fns = {"author_names": lambda a, b, embedding_table: 5}
-    assert pipeline._is_embedding_table_required()
-
-    pipeline.matching_fns = {"author_names": lambda a, b, embedding_table=None: 5}
-    assert not pipeline._is_embedding_table_required()
+def test_requires_embedding_table():
+    assert Pipeline._requires_embedding_table(lambda a, b, embedding_table: 1.0)
+    assert not Pipeline._requires_embedding_table(lambda a, b: 1.0)
