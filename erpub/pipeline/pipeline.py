@@ -1,9 +1,11 @@
+from functools import partial
 import glob
 import logging
 import os
+import inspect
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from statistics import fmean
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -25,18 +27,38 @@ class Pipeline:
     def __init__(
         self,
         file_dir: str,
-        similarity_threshold: float,
         preprocess_data_fn: Callable[[pd.DataFrame], pd.DataFrame] | None = None,
         blocking_fn: Callable[[Sequence], np.ndarray] = naive_all_pairs,
-        matching_fns: dict[str, Callable[[str, str], float]] = {
-            attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES
-        },
+        matching_fns: dict[
+            str,
+            Callable[[str, str], float]
+            | Callable[[str, str, dict[str, np.ndarray]], float],
+        ] = {attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES},
+        embeddings_for_matching: str | None = None,
     ):
         self.df = Pipeline._load_data(file_dir)
-        self.similarity_threshold = similarity_threshold
+        if embeddings_for_matching is None and any(
+            Pipeline._requires_embedding_table(f) for f in matching_fns.values()
+        ):
+            raise ValueError(
+                "Missing required parameter 'embeddings_for_matching' as one of the matching functions require them"
+            )
+        self.embedding_table = (
+            Pipeline._get_embedding_table(embeddings_for_matching)
+            if embeddings_for_matching
+            else None
+        )
         self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
+        self.matching_fns_vec: dict[
+            str, Callable[[Sequence[str], Sequence[str]], float]
+        ] = {
+            attr: np.vectorize(partial(match_f, embedding_table=self.embedding_table))
+            if self._requires_embedding_table(match_f)
+            else np.vectorize(match_f)
+            for attr, match_f in matching_fns.items()
+        }
         self.matched_pairs: np.ndarray | None = None
         logging.info("Pipeline initialized")
 
@@ -63,8 +85,38 @@ class Pipeline:
         logging.info("Loaded csv successfully into pandas dataframe")
         return df
 
+    @staticmethod
+    def _get_embedding_table(path: str) -> defaultdict[str, np.ndarray]:
+        """Build the embedding table as default dict with a random ndarray as default
+
+        Parameters
+        ----------
+        path: str
+            The path of the embeddings txt file (e.g. "glove.6B.50d.txt")
+
+        Returns
+        ----------
+        embeddings_dict: defaultdict[str, np.ndarray]
+            The embeddings mapping from word to vector
+            and on unkown word returning a random vector
+        """
+        embeddings_dict = {}
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], "float32")
+                embeddings_dict[word] = vector
+        default_vector = np.random.rand(*vector.shape)
+        return defaultdict(lambda: default_vector, embeddings_dict)
+
+    @staticmethod
+    def _requires_embedding_table(match_f: Callable) -> bool:
+        "Returns True if the passed match_f requires embedding_table as it's argument, else False"
+        return "embedding_table" in inspect.signature(match_f).parameters
+
     def _write_matched_entities_csv(
-        self, matched_pairs: np.ndarray, dir_name: str
+        self, matched_pairs: np.ndarray, dir_name: str, similarity_threshold: float
     ) -> None:
         """Writes for each match between entities from different datasets
         an entry to the match_dir.
@@ -92,10 +144,12 @@ class Pipeline:
             file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
             for attr, f in self.matching_fns.items():
                 file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
-            file.write(f"Similarity threshold: {self.similarity_threshold}\n")
+            file.write(f"Similarity threshold: {similarity_threshold}\n")
 
     @staticmethod
-    def _cluster_matched_entities(matched_pairs: Iterable[tuple[int, int]]) -> list[set[int]]:
+    def _cluster_matched_entities(
+        matched_pairs: Iterable[tuple[int, int]]
+    ) -> list[set[int]]:
         """Clusters the matched_pairs.
 
         Parameters
@@ -149,7 +203,26 @@ class Pipeline:
                 index=False,
             )
 
-    def run(self, dir_name: str) -> None:
+    def _get_similarity_scores(self, pairs_to_match: np.ndarray) -> np.ndarray:
+        """Calculates the average similarity score over matching_fns.
+        Parameters
+        ----------
+        pairs_to_match : ndarray(dtype=int64, ndim=2)
+            Array of size #pairs x 2 containing the indices for each pair as a row.
+        Returns
+        ----------
+        similarity_score : ndarray(dtype=float64, ndim=0)
+            Array containing the similarity scores for each pair.
+        """
+        similarity_scores = []
+        for attr, match_f in self.matching_fns_vec.items():
+            attr_df = self.df[attr]
+            a = attr_df.iloc[pairs_to_match[:, 0]]
+            b = attr_df.iloc[pairs_to_match[:, 1]]
+            similarity_scores.append(match_f(a, b))
+        return np.mean(similarity_scores, axis=0)
+
+    def run(self, dir_name: str, similarity_threshold: float) -> None:
         """Execute the entity resolution pipeline.
 
         Parameters
@@ -170,22 +243,12 @@ class Pipeline:
         logging.info(f"Calculate similarities of {len(pairs_to_match)} pairs")
         for attr, f in self.matching_fns.items():
             logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
-        similarity_scores = np.array(
-            [
-                fmean(
-                    [
-                        match_f(self.df.iloc[a][attr], self.df.iloc[b][attr])
-                        for attr, match_f in self.matching_fns.items()
-                    ]
-                )
-                for a, b in pairs_to_match
-            ]
-        )
-        self.matched_pairs = pairs_to_match[
-            similarity_scores > self.similarity_threshold
-        ]
+        similarity_scores = self._get_similarity_scores(pairs_to_match)
+        self.matched_pairs = pairs_to_match[similarity_scores > similarity_threshold]
         logging.info("Writing the matched paper_ids to directory {dir_name}")
-        self._write_matched_entities_csv(self.matched_pairs, dir_name)
+        self._write_matched_entities_csv(
+            self.matched_pairs, dir_name, similarity_threshold
+        )
 
     def resolve(self, dir_name: str) -> None:
         """Resolves the matched entities and writing the new data to dir_name.
