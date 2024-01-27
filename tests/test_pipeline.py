@@ -250,7 +250,7 @@ def test_write_resolved_data(temp_csv_dir):
     )
 
 
-def test_get_similarity_scores(mocker):
+def test__get_similarity_matrices(mocker):
     mocker.patch.object(Pipeline, "_load_data")
     pipeline = Pipeline("foo")
 
@@ -258,15 +258,16 @@ def test_get_similarity_scores(mocker):
         {
             "paper_title": ["this is foo", "this is foo", "something else"],
             "author_names": ["Mr Foo", "Mr Bar", "Someone else"],
+            "block": ["1", "1", "1"]
         }
     )
-    pipeline.matching_fns_vec = {
-        attr: np.vectorize(jaccard_similarity)
+    pipeline.matching_fns = {
+        attr: jaccard_similarity
         for attr in ["paper_title", "author_names"]
     }
-    pairs_to_match = np.array([[0, 1], [0, 2], [1, 2]])
 
-    scores = pipeline._get_similarity_scores(pairs_to_match)
-    assert len(scores) == len(pairs_to_match)
-    assert all(scores >= 0)
-    assert scores[0] > 0.6
+    similarity_matrices = pipeline._get_similarity_matrices()
+    assert len(similarity_matrices) == 1
+    assert similarity_matrices["1"].shape == (3,3)
+    assert np.all(similarity_matrices["1"] >= 0)
+    assert similarity_matrices["1"][0,1] > 0.6
