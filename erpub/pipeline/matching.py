@@ -18,6 +18,6 @@ def vector_embeddings(
     """Use word embeddings to map tokens to vectors,
     average them and then return the cosine similarity"""
     embedded_df = data.apply(
-        lambda x: np.mean([embedding_table[token] for token in x.split()], axis=0)
+        lambda attr: np.mean([embedding_table[token] for token in attr.split()], axis=0)
     )
     return cosine_similarity(np.stack(embedded_df))

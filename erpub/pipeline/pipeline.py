@@ -36,6 +36,28 @@ class Pipeline:
         ] = {attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES},
         embeddings_for_matching: str | None = None,
     ):
+        """Initialize the Entity Resolution Pipeline.
+
+        Parameters
+        ----------
+        file_dir : str
+            Directory path containing the csv files created by data_preparation.py.
+        preprocess_data_fn : Callable[[pd.DataFrame], pd.DataFrame] | None, optional
+            Function to preprocess the input data, by default None.
+        blocking_fn : Callable[[pd.DataFrame], None], optional
+            Function to perform blocking and create blocks, by default naive_all_pairs.
+        matching_fns : dict, optional
+            Dictionary of attribute names and matching functions, by default using Jaccard similarity
+            for default attributes ("paper_title", "author_names", "publication_venue", "year_of_publication").
+        embeddings_for_matching : str | None, optional
+            Path to the embeddings txt file (e.g., "glove.6B.50d.txt") used for matching functions
+            requiring embeddings, by default None.
+
+        Raises
+        ----------
+        ValueError
+            If `embeddings_for_matching` is missing, but required by matching functions.
+        """
         self.df = Pipeline._load_data(file_dir)
         if embeddings_for_matching is None and any(
             Pipeline._requires_embedding_table(f) for f in matching_fns.values()
@@ -106,6 +128,13 @@ class Pipeline:
     def _requires_embedding_table(match_f: Callable) -> bool:
         "Returns True if the passed match_f requires embedding_table as it's argument, else False"
         return "embedding_table" in inspect.signature(match_f).parameters
+
+    @staticmethod
+    def _requires_pandas_series(fn: Callable) -> bool:
+        return (
+            next(iter(inspect.signature(fn).parameters.values())).annotation
+            == pd.Series
+        )
 
     def _write_matched_entities_csv(
         self, matched_pairs: np.ndarray, dir_name: str, similarity_threshold: float
@@ -195,63 +224,79 @@ class Pipeline:
                 index=False,
             )
 
-    def _get_similarity_matrix(self) -> dict[str, np.ndarray]:
-        """Calculates the average similarity score over matching_fns.
-        Parameters
-        ----------
-        pairs_to_match : ndarray(dtype=int64, ndim=2)
-            Array of size #pairs x 2 containing the indices for each pair as a row.
+    def _get_similarity_matrices(self) -> dict[str, np.ndarray]:
+        """Calculates a dict with the average similarity matrix over matching_fns for each block.
         Returns
         ----------
-        similarity_matrix : ndarray(dtype=float64, ndim=0)
-            Array containing the similarity scores for each pair.
+        similarity_matrices : dict[str, ndarray(dtype=float64, ndim=2)]
+            Dict with similarity matrices for each cluster of size NxN where N is the elements in the block.
         """
-        similarity_scores = {}
+        similarity_matrices = {}
         for block_id, block_df in self.df.groupby("block"):
-            matrix_lst = []
-            for attr, match_f in self.matching_fns.items():
-                if self.is_function_two_str_arguments(match_f):
-                    matrix_lst.append(
-                        self.vectorize_simple_function(block_df[attr], match_f)
-                    )
-                elif self._requires_embedding_table(match_f):
-                    matrix_lst.append(match_f(block_df[attr], self.embedding_table)) # type: ignore
-                else:
-                    raise NotImplementedError()
+            matrix_lst: list[np.ndarray] = [
+                match_f(block_df[attr], self.embedding_table) # type: ignore
+                if Pipeline._requires_embedding_table(match_f)
+                and Pipeline._requires_pandas_series(match_f)
+                else self._vectorize_simple_function(block_df[attr], match_f) # type: ignore
+                for attr, match_f in self.matching_fns.items()
+            ]
             sim_matrix_block = np.mean(
                 matrix_lst, axis=0
             )  # Average of the matching functions
-            similarity_scores[block_id] = sim_matrix_block
-        return similarity_scores
+            similarity_matrices[block_id] = sim_matrix_block
+        return similarity_matrices
 
-    def is_function_two_str_arguments(self, func: Callable) -> bool:
-        parameters = inspect.signature(func).parameters.values()
-        return len(parameters) == 2 and all(
-            param.annotation == str for param in parameters
-        )
+    def _vectorize_simple_function(
+        self, data: pd.Series, fn: Callable[[str, str], float]
+    ) -> np.ndarray:
+        """Vectorizes a simple function over the elements of a pandas Series.
 
-    def vectorize_simple_function(self, data: pd.Series, fn: Callable) -> np.ndarray:
+        Parameters
+        ----------
+        data : pd.Series
+            The pandas Series containing the data.
+        fn : Callable[[str, str], float]
+            The function to be vectorized.
+
+        Returns
+        ----------
+        similarity_matrix : ndarray(dtype=float64, ndim=2)
+            Resulting matrix after applying the function to all pairs of elements in the Series.
+            It's of size NxN where N is the length of the Series.
+        """
         n = len(data)
-        res_matrix = np.zeros((n, n))
+        similarity_matrix = np.zeros((n, n))
         indices_a, indices_b = np.triu_indices(n)
         a = data.iloc[indices_a]
         b = data.iloc[indices_b]
-        res_matrix[indices_a, indices_b] = np.vectorize(fn)(a, b)
-        return res_matrix
+        similarity_matrix[indices_a, indices_b] = np.vectorize(fn)(a, b)
+        return similarity_matrix
 
-    def _get_matched_pairs(self, similarity_scores: dict[str,np.ndarray], similarity_threshold: float) -> np.ndarray:
+    def _get_matched_pairs(
+        self, similarity_scores: dict[str, np.ndarray], similarity_threshold: float
+    ) -> np.ndarray:
+        """Extracts matched pairs from similarity scores.
+
+        Parameters
+        ----------
+        similarity_matrices : dict[str, ndarray(dtype=float64, ndim=2)]
+            Dictionary with similarity matrices for each block.
+        similarity_threshold : float
+            Similarity threshold used for matching.
+
+        Returns
+        ----------
+        matched_pairs : ndarray(dtype=int64, ndim=2)
+            Array of matched pairs containing indices.
+        """
         matched_pairs = []
         for block, matrix in similarity_scores.items():
             df_block = self.df[self.df["block"] == block]
             indices = np.triu(matrix >= similarity_threshold, k=1).nonzero()
             matched_pairs_block = np.hstack((indices[0][:, None], indices[1][:, None]))
-            left_side = df_block.iloc[matched_pairs_block[:, 0]].index.to_numpy()[
-                :, None
-            ]
-            right_side = df_block.iloc[matched_pairs_block[:, 1]].index.to_numpy()[
-                :, None
-            ]
-            matched_pairs.append(np.hstack((left_side, right_side)))
+            a = df_block.iloc[matched_pairs_block[:, 0]].index.to_numpy()
+            b = df_block.iloc[matched_pairs_block[:, 1]].index.to_numpy()
+            matched_pairs.append(np.hstack((a[:, np.newaxis], b[:, np.newaxis])))
         return np.concatenate(matched_pairs, axis=0)
 
     def run(self, dir_name: str, similarity_threshold: float) -> None:
@@ -275,7 +320,7 @@ class Pipeline:
         logging.info(f"Amount of different blocks: {self.df['block'].nunique()}")
         for attr, f in self.matching_fns.items():
             logging.info(f"Attribute '{attr}' is matched using function {f.__name__}")
-        similarity_scores = self._get_similarity_matrix()
+        similarity_scores = self._get_similarity_matrices()
         self.matched_pairs = self._get_matched_pairs(
             similarity_scores, similarity_threshold
         )
