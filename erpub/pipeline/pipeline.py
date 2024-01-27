@@ -238,8 +238,8 @@ class Pipeline:
                     match_f(block_df[attr], self.embedding_table)  # type: ignore
                     if Pipeline._requires_embedding_table(match_f)
                     and Pipeline._requires_pandas_series(match_f)
-                    else self._vectorize_simple_function(block_df[attr], match_f)
-                )  # type: ignore
+                    else self._vectorize_simple_function(block_df[attr], match_f)  # type: ignore
+                )
                 for attr, match_f in self.matching_fns.items()
             ]
             sim_matrix_block = np.mean(
