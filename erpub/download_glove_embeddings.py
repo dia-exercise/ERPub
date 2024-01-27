@@ -1,8 +1,9 @@
 import argparse
 import logging
 import os
-import requests
 import zipfile
+
+import requests
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 

@@ -1,11 +1,11 @@
-from functools import partial
 import glob
+import inspect
 import logging
 import os
-import inspect
-from collections.abc import Callable, Iterable, Sequence
-from pathlib import Path
 from collections import defaultdict
+from collections.abc import Callable, Iterable, Sequence
+from functools import partial
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -234,10 +234,12 @@ class Pipeline:
         similarity_matrices = {}
         for block_id, block_df in self.df.groupby("block"):
             matrix_lst: list[np.ndarray] = [
-                match_f(block_df[attr], self.embedding_table) # type: ignore
-                if Pipeline._requires_embedding_table(match_f)
-                and Pipeline._requires_pandas_series(match_f)
-                else self._vectorize_simple_function(block_df[attr], match_f) # type: ignore
+                (
+                    match_f(block_df[attr], self.embedding_table)  # type: ignore
+                    if Pipeline._requires_embedding_table(match_f)
+                    and Pipeline._requires_pandas_series(match_f)
+                    else self._vectorize_simple_function(block_df[attr], match_f)
+                )  # type: ignore
                 for attr, match_f in self.matching_fns.items()
             ]
             sim_matrix_block = np.mean(

@@ -1,12 +1,13 @@
 import csv
+import logging
 import os.path
 import tarfile
-import requests
-import logging
-import pandas as pd
 from pathlib import Path
 
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
+import pandas as pd
+import requests
+
+logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
 
 def download_input(url, target_dir):
@@ -66,13 +67,17 @@ def read_txt(input_file: str) -> list[dict]:
 
             elif line == "\n":
                 # exclude publications that don't provide the attributes we filter on
-                if not current_block.get("publication_venue") or not current_block.get("year_of_publication"):
+                if not current_block.get("publication_venue") or not current_block.get(
+                    "year_of_publication"
+                ):
                     current_block = {}
                     continue
 
                 pub_venue_lower = current_block["publication_venue"].lower()
                 year = int(current_block["year_of_publication"])
-                if ("sigmod" in pub_venue_lower or "vldb" in pub_venue_lower) and 1995 <= year <= 2004:
+                if (
+                    "sigmod" in pub_venue_lower or "vldb" in pub_venue_lower
+                ) and 1995 <= year <= 2004:
                     filtered_blocks.append(current_block)
 
                 current_block = {}
@@ -86,7 +91,9 @@ def remove_duplicates(blocks: list[dict]) -> list[dict]:
 
     df = pd.DataFrame(blocks)
     df_dedup = df.drop_duplicates()
-    logging.info(f"Removed {df.shape[0] - df_dedup.shape[0]} duplicate publication entries")
+    logging.info(
+        f"Removed {df.shape[0] - df_dedup.shape[0]} duplicate publication entries"
+    )
     return df_dedup.to_dict("records")
 
 
@@ -99,7 +106,13 @@ def write_csv(blocks: list[dict], target_dir: str, output_file: str) -> None:
     target_path = os.path.join(abs_target_dir, output_file)
     logging.info(f"Writing {target_path}")
     with open(target_path, "w") as file:
-        fields = ["paper_id", "paper_title", "author_names", "publication_venue", "year_of_publication"]
+        fields = [
+            "paper_id",
+            "paper_title",
+            "author_names",
+            "publication_venue",
+            "year_of_publication",
+        ]
         writer = csv.DictWriter(file, fieldnames=fields)
         writer.writeheader()
         writer.writerows(blocks)

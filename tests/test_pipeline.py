@@ -1,15 +1,14 @@
-from collections import defaultdict
 import csv
 import os
+from collections import defaultdict
 from tempfile import TemporaryDirectory
 
 import numpy as np
 import pandas as pd
 import pytest
-from erpub.pipeline.matching import jaccard_similarity, vector_embeddings
 
 from erpub.pipeline.blocking import naive_all_pairs
-from erpub.pipeline.matching import jaccard_similarity
+from erpub.pipeline.matching import jaccard_similarity, vector_embeddings
 from erpub.pipeline.pipeline import Pipeline
 
 
@@ -258,16 +257,15 @@ def test__get_similarity_matrices(mocker):
         {
             "paper_title": ["this is foo", "this is foo", "something else"],
             "author_names": ["Mr Foo", "Mr Bar", "Someone else"],
-            "block": ["1", "1", "1"]
+            "block": ["1", "1", "1"],
         }
     )
     pipeline.matching_fns = {
-        attr: jaccard_similarity
-        for attr in ["paper_title", "author_names"]
+        attr: jaccard_similarity for attr in ["paper_title", "author_names"]
     }
 
     similarity_matrices = pipeline._get_similarity_matrices()
     assert len(similarity_matrices) == 1
-    assert similarity_matrices["1"].shape == (3,3)
+    assert similarity_matrices["1"].shape == (3, 3)
     assert np.all(similarity_matrices["1"] >= 0)
-    assert similarity_matrices["1"][0,1] > 0.6
+    assert similarity_matrices["1"][0, 1] > 0.6

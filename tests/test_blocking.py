@@ -1,6 +1,7 @@
-from erpub.pipeline.blocking import naive_all_pairs, same_year_of_publication
-import pytest
 import pandas as pd
+import pytest
+
+from erpub.pipeline.blocking import naive_all_pairs, same_year_of_publication
 
 
 @pytest.fixture
@@ -34,4 +35,3 @@ def test_same_year_of_publication(sample_df):
     same_year_of_publication(sample_df)
     assert "block" in sample_df
     assert sample_df["block"].nunique() == 3
-
