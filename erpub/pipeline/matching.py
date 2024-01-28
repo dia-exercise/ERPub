@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.spatial.distance import cosine
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
 
 
 def jaccard_similarity(a: str, b: str) -> float:
@@ -11,10 +12,12 @@ def jaccard_similarity(a: str, b: str) -> float:
     return score
 
 
-def vector_embeddings(a: str, b: str, embedding_table: dict[str, np.ndarray]) -> float:
+def vector_embeddings(
+    data: pd.Series, embedding_table: dict[str, np.ndarray]
+) -> np.ndarray:
     """Use word embeddings to map tokens to vectors,
     average them and then return the cosine similarity"""
-    mean_vec_a = np.mean([embedding_table[token] for token in a.split()], axis=0)
-    mean_vec_b = np.mean([embedding_table[token] for token in b.split()], axis=0)
-    cos_sim = 1 - cosine(mean_vec_a, mean_vec_b)
-    return cos_sim
+    embedded_df = data.apply(
+        lambda attr: np.mean([embedding_table[token] for token in attr.split()], axis=0)
+    )
+    return cosine_similarity(np.stack(embedded_df))

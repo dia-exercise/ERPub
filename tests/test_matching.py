@@ -1,8 +1,34 @@
+import numpy as np
+import pandas as pd
 import pytest
 
-import numpy as np
-
 from erpub.pipeline.matching import jaccard_similarity, vector_embeddings
+
+
+@pytest.fixture
+def sample_series():
+    return pd.Series(
+        [
+            "Foo Foo",
+            "bar",
+            "foo foo",
+        ]
+    )
+
+
+@pytest.fixture
+def sample_embedding_table():
+    vec1 = np.random.rand(
+        20,
+    )
+    vec2 = np.random.rand(
+        20,
+    )
+    return {
+        "foo": vec1,
+        "bar": vec2,
+        "Foo": vec1,
+    }
 
 
 def test_jaccard_similarity():
@@ -15,15 +41,8 @@ def test_jaccard_similarity_fails_on_empty_attributes():
         jaccard_similarity("", "")
 
 
-def test_vector_embeddings():
-    vec1, vec2 = np.random.rand(20,), np.random.rand(
-        20,
-    )
-    embedding_table = {
-        "foo": vec1,
-        "bar": vec2,
-        "Foo": vec1,
-    }
-    assert vector_embeddings("foo", "foo", embedding_table) == 1
-    assert vector_embeddings("foo", "Foo", embedding_table) == 1
-    assert vector_embeddings("Foo foo", "Foo bar", embedding_table) < 1
+def test_vector_embeddings(sample_series, sample_embedding_table):
+    similarity_matrix = vector_embeddings(sample_series, sample_embedding_table)
+    assert similarity_matrix.shape == (3, 3)
+    assert similarity_matrix[0, 2] > 0.999
+    assert similarity_matrix[0, 1] < 1
