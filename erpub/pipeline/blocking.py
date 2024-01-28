@@ -1,3 +1,4 @@
+import typing
 import pandas as pd
 
 
@@ -16,7 +17,7 @@ def author_names_initials(data: pd.DataFrame) -> None:
     data["block"] = data.groupby("initials").ngroup()
     data.drop("initials", axis=1, inplace=True)
 
-
+@typing.no_type_check
 def _extract_initials(names: str) -> str:
     # assumption: names are separated by a comma
     name_list = names.split(",")
