@@ -35,6 +35,7 @@ class Pipeline:
             | Callable[[pd.Series, defaultdict[str, np.ndarray]], np.ndarray],
         ] = {attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES},
         embeddings_for_matching: str | None = None,
+        verbose = True,
     ):
         """Initialize the Entity Resolution Pipeline.
 
@@ -58,6 +59,8 @@ class Pipeline:
         ValueError
             If `embeddings_for_matching` is missing, but required by matching functions.
         """
+        if not verbose:
+            logging.disable(logging.INFO)
         self.df = Pipeline._load_data(file_dir)
         if embeddings_for_matching is None and any(
             Pipeline._requires_embedding_table(f) for f in matching_fns.values()
