@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from erpub.pipeline.matching import jaccard_similarity, vector_embeddings
+from erpub.pipeline.matching import (jaccard_similarity, specific_name_matcher,
+                                     vector_embeddings)
 
 
 @pytest.fixture
@@ -46,3 +47,9 @@ def test_vector_embeddings(sample_series, sample_embedding_table):
     assert similarity_matrix.shape == (3, 3)
     assert similarity_matrix[0, 2] > 0.999
     assert similarity_matrix[0, 1] < 1
+
+
+def test_specific_name_matcher():
+    assert specific_name_matcher("J. M. Doe", "John Doe") == 1.0
+    assert specific_name_matcher("John Doe", "Jane Doe") == 1.0
+    assert specific_name_matcher("John Doe", "Bob Smith") == 0.0

@@ -222,7 +222,7 @@ def test_pipeline_resolve(temp_csv_dir, mocker):
 
 def test_write_resolved_data(temp_csv_dir):
     pipeline = Pipeline(file_dir=temp_csv_dir)
-    pipeline.df = pd.concat([pipeline.df, pipeline.df], ignore_index=True)
+    pipeline.original_df = pd.concat([pipeline.original_df, pipeline.original_df], ignore_index=True)
     clusters = [{0, 3, 5, 7}]
     resolved_dir = os.path.join(temp_csv_dir, "my_dir")
     pipeline._write_resolved_data(clusters, resolved_dir)
