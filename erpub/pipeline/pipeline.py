@@ -3,8 +3,7 @@ import inspect
 import logging
 import os
 from collections import defaultdict
-from collections.abc import Callable, Iterable, Sequence
-from functools import partial
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import numpy as np
@@ -61,7 +60,13 @@ class Pipeline:
         """
         if not verbose:
             logging.disable(logging.INFO)
-        self.df = Pipeline._load_data(file_dir)
+        self.original_df = Pipeline._load_data(file_dir)
+        if preprocess_data_fn:
+            logging.info("Data will be preprocessed")
+            self.df = preprocess_data_fn(self.original_df.copy())
+        else:
+            logging.info("Preprocessing has been skipped")
+            self.df = self.original_df.copy()
         if embeddings_for_matching is None and any(
             Pipeline._requires_embedding_table(f) for f in matching_fns.values()
         ):
@@ -73,7 +78,6 @@ class Pipeline:
             if embeddings_for_matching
             else None
         )
-        self.preprocess_data_fn = preprocess_data_fn
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
         self.matched_pairs: np.ndarray | None = None
@@ -211,7 +215,7 @@ class Pipeline:
         dir_name : str
             Directory path where the resolved csv files will be put.
         """
-        df = self.df.copy()
+        df = self.original_df
         all_columns = ["paper_id"] + DEFAULT_ATTRIBUTES
         for cluster in clusters:
             cluster_list = list(cluster)
@@ -312,12 +316,6 @@ class Pipeline:
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
         """
-        if self.preprocess_data_fn:
-            logging.info("Data will be preprocessed")
-            self.df = self.preprocess_data_fn(self.df)
-        else:
-            logging.info("Preprocessing has been skipped")
-
         logging.info(
             f"Create blocks through blocking function {self.blocking_fn.__name__}"
         )
