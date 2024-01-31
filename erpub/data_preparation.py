@@ -56,7 +56,7 @@ def read_txt(input_file: str) -> list[dict]:
         # use set_dict_value() to populate dict. this is to ensure that the input file is properly formatted:
         # if a block contains two lines of the same type (except paper references), an exception will be thrown
         # if two blocks aren't separated by a newline, an exception will be thrown
-        for line in file:
+        for i, line in enumerate(file):
             if line.startswith("#*"):
                 _set_dict_value(current_block, "paper_title", line[2:].rstrip())
             elif line.startswith("#@"):
@@ -67,6 +67,8 @@ def read_txt(input_file: str) -> list[dict]:
                 _set_dict_value(current_block, "publication_venue", line[2:].rstrip())
             elif line.startswith("#index"):
                 _set_dict_value(current_block, "paper_id", line[6:].rstrip())
+            elif line.startswith("#%") or line.startswith("#!"):
+                continue
 
             elif line == "\n":
                 # exclude publications that don't provide the attributes we filter on
@@ -84,6 +86,9 @@ def read_txt(input_file: str) -> list[dict]:
                     filtered_blocks.append(current_block)
 
                 current_block = {}
+
+            else:
+                logging.warning(f"Unexpected line prefix in line {i}: {line.strip()}")
 
     logging.info(f"Found {len(filtered_blocks)} publications matching criteria")
     return filtered_blocks
