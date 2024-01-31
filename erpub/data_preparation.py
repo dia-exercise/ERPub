@@ -1,9 +1,12 @@
 import csv
 import logging
 import os.path
+import random
 import tarfile
+import string
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -53,7 +56,7 @@ def read_txt(input_file: str) -> list[dict]:
         # use set_dict_value() to populate dict. this is to ensure that the input file is properly formatted:
         # if a block contains two lines of the same type (except paper references), an exception will be thrown
         # if two blocks aren't separated by a newline, an exception will be thrown
-        for line in file:
+        for i, line in enumerate(file):
             if line.startswith("#*"):
                 _set_dict_value(current_block, "paper_title", line[2:].rstrip())
             elif line.startswith("#@"):
@@ -64,6 +67,8 @@ def read_txt(input_file: str) -> list[dict]:
                 _set_dict_value(current_block, "publication_venue", line[2:].rstrip())
             elif line.startswith("#index"):
                 _set_dict_value(current_block, "paper_id", line[6:].rstrip())
+            elif line.startswith("#%") or line.startswith("#!"):
+                continue
 
             elif line == "\n":
                 # exclude publications that don't provide the attributes we filter on
@@ -81,6 +86,9 @@ def read_txt(input_file: str) -> list[dict]:
                     filtered_blocks.append(current_block)
 
                 current_block = {}
+
+            else:
+                logging.warning(f"Unexpected line prefix in line {i}: {line.strip()}")
 
     logging.info(f"Found {len(filtered_blocks)} publications matching criteria")
     return filtered_blocks
@@ -118,6 +126,32 @@ def write_csv(blocks: list[dict], target_dir: str, output_file: str) -> None:
         writer.writerows(blocks)
 
 
+def replicate_dataset(input_file: str, target_dir: str, output_file: str, replication_factor: int) -> None:
+    """
+    Replicate the dataset from input_file replication_factor times.
+    Introduce random modifications in columns 'years_of_publication', 'paper_title', 'author_names', 'publication_venue'.
+    """
+
+    abs_input_path = _get_abs_path(input_file)
+    logging.info(f"Replicating {abs_input_path} by factor {replication_factor}")
+
+    abs_target_dir = _get_abs_path(target_dir)
+    Path(abs_target_dir).mkdir(parents=True, exist_ok=True)
+    abs_target_path = os.path.join(abs_target_dir, output_file)
+
+    df = pd.read_csv(abs_input_path)
+    new_df = pd.DataFrame(np.repeat(df.values, replication_factor-1, axis=0), columns=df.columns)
+
+    new_df["year_of_publication"] = new_df["year_of_publication"].apply(lambda y: _randomly_replace_year(y, prob=0.5))
+    new_df["paper_title"] = new_df["paper_title"].apply(lambda s: _randomly_replace_chars(s, prob=0.02))
+    new_df["author_names"] = new_df["author_names"].apply(lambda s: _randomly_replace_chars(s, prob=0.02))
+    new_df["publication_venue"] = new_df["publication_venue"].apply(lambda s: _randomly_replace_chars(s, prob=0.02))
+
+    merged_df = pd.concat([new_df, df], ignore_index=True)
+    logging.info(f"Writing {abs_target_path}")
+    merged_df.to_csv(abs_target_path, index=False)
+
+
 def _get_abs_path(rel_path: str) -> str:
     """Turn rel_path into an absolute path, relative to this file."""
     abs_file_dir = os.path.dirname(__file__)
@@ -132,11 +166,29 @@ def _set_dict_value(dict_: dict, key: str, value: str) -> None:
         dict_[key] = value
 
 
+def _randomly_replace_year(year: int, prob: float) -> int:
+    """Return random year between 1995-2004 with probability prob. Otherwise, return input year."""
+    if random.random() < prob:
+        return random.randrange(1995, 2005)
+    else:
+        return year
+
+
+def _randomly_replace_chars(string_: str, prob: float) -> str:
+    """Replace any char in string_ by random ascii letter with probability prob."""
+    string_list = list(str(string_))
+    for i, char in enumerate(string_list):
+        if char != " " and random.random() < prob:
+            string_list[i] = random.choice(string.ascii_letters)
+    return "".join(string_list)
+
+
 if __name__ == "__main__":
     dblp_url = "https://lfs.aminer.cn/lab-datasets/citation/dblp.v8.tgz"
     acm_url = "https://lfs.aminer.cn/lab-datasets/citation/citation-acm-v8.txt.tgz"
     download_target_dir = "data/raw"
     prepared_target_dir = "data/prepared"
+    create_replicas = True
 
     download_input(dblp_url, download_target_dir)
     dblp_blocks = read_txt(f"{download_target_dir}/dblp.txt")
@@ -147,3 +199,15 @@ if __name__ == "__main__":
     acm_blocks = read_txt(f"{download_target_dir}/citation-acm-v8.txt")
     acm_blocks = remove_duplicates(acm_blocks)
     write_csv(acm_blocks, prepared_target_dir, "ACM_1995_2004.csv")
+
+    if create_replicas:
+        for rep_factor in range(2,11):
+            replicate_dataset(f"{prepared_target_dir}/DBLP_1995_2004.csv",
+                              prepared_target_dir,
+                              f"DBLP_1995_2004_rep_{rep_factor}x.csv",
+                              rep_factor)
+
+            replicate_dataset(f"{prepared_target_dir}/ACM_1995_2004.csv",
+                              prepared_target_dir,
+                              f"ACM_1995_2004_rep_{rep_factor}x.csv",
+                              rep_factor)
