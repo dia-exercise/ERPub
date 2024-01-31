@@ -183,6 +183,7 @@ if __name__ == "__main__":
     acm_url = "https://lfs.aminer.cn/lab-datasets/citation/citation-acm-v8.txt.tgz"
     download_target_dir = "data/raw"
     prepared_target_dir = "data/prepared"
+    create_replicas = True
 
     download_input(dblp_url, download_target_dir)
     dblp_blocks = read_txt(f"{download_target_dir}/dblp.txt")
@@ -194,13 +195,14 @@ if __name__ == "__main__":
     acm_blocks = remove_duplicates(acm_blocks)
     write_csv(acm_blocks, prepared_target_dir, "ACM_1995_2004.csv")
 
-    for rep_factor in range(2,11):
-        replicate_dataset(f"{prepared_target_dir}/DBLP_1995_2004.csv",
-                          prepared_target_dir,
-                          f"DBLP_1995_2004_rep_{rep_factor}x.csv",
-                          rep_factor)
+    if create_replicas:
+        for rep_factor in range(2,11):
+            replicate_dataset(f"{prepared_target_dir}/DBLP_1995_2004.csv",
+                              prepared_target_dir,
+                              f"DBLP_1995_2004_rep_{rep_factor}x.csv",
+                              rep_factor)
 
-        replicate_dataset(f"{prepared_target_dir}/ACM_1995_2004.csv",
-                          prepared_target_dir,
-                          f"ACM_1995_2004_rep_{rep_factor}x.csv",
-                          rep_factor)
+            replicate_dataset(f"{prepared_target_dir}/ACM_1995_2004.csv",
+                              prepared_target_dir,
+                              f"ACM_1995_2004_rep_{rep_factor}x.csv",
+                              rep_factor)
