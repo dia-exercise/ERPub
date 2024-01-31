@@ -34,7 +34,7 @@ def download_input(url, target_dir):
 
     logging.info(f"Extracting {target_path}")
     with tarfile.open(target_path, "r") as file:
-        file.extractall(target_dir)
+        file.extractall(abs_target_dir)
 
 
 def read_txt(input_file: str) -> list[dict]:
