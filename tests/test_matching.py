@@ -2,8 +2,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from erpub.pipeline.matching import (jaccard_similarity, specific_name_matcher,
-                                     vector_embeddings)
+from erpub.pipeline.matching import (
+    jaccard_similarity,
+    specific_name_matcher,
+    vector_embeddings,
+)
 
 
 @pytest.fixture
