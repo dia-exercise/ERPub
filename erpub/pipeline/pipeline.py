@@ -2,6 +2,7 @@ import glob
 import inspect
 import logging
 import os
+import time
 from collections import defaultdict
 from collections.abc import Callable, Iterable
 from pathlib import Path
@@ -34,7 +35,7 @@ class Pipeline:
             | Callable[[pd.Series, defaultdict[str, np.ndarray]], np.ndarray],
         ] = {attr: jaccard_similarity for attr in DEFAULT_ATTRIBUTES},
         embeddings_for_matching: str | None = None,
-        verbose = True,
+        verbose: bool = True,
     ):
         """Initialize the Entity Resolution Pipeline.
 
@@ -308,17 +309,23 @@ class Pipeline:
             matched_pairs.append(np.hstack((a[:, np.newaxis], b[:, np.newaxis])))
         return np.concatenate(matched_pairs, axis=0)
 
-    def run(self, dir_name: str, similarity_threshold: float) -> None:
+    def run(self, dir_name: str, similarity_threshold: float) -> float:
         """Execute the entity resolution pipeline.
 
         Parameters
         ----------
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+
+        Returns
+        ----------
+        pipeline_execution_time : float
+            The pipeline execution time in seconds.
         """
         logging.info(
             f"Create blocks through blocking function {self.blocking_fn.__name__}"
         )
+        pipeline_start_time = time.time()
         self.blocking_fn(self.df)
         logging.info(f"Amount of different blocks: {self.df['block'].nunique()}")
         for attr, f in self.matching_fns.items():
@@ -327,10 +334,12 @@ class Pipeline:
         self.matched_pairs = self._get_matched_pairs(
             similarity_scores, similarity_threshold
         )
+        pipeline_execution_time = time.time() - pipeline_start_time
         logging.info(f"Writing the matched paper_ids to directory {dir_name}")
         self._write_matched_entities_csv(
             self.matched_pairs, dir_name, similarity_threshold
         )
+        return pipeline_execution_time
 
     def resolve(self, dir_name: str) -> None:
         """Resolves the matched entities and writing the new data to dir_name.
