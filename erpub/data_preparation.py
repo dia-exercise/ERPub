@@ -121,7 +121,7 @@ def write_csv(blocks: list[dict], target_dir: str, output_file: str) -> None:
 def _get_abs_path(rel_path: str) -> str:
     """Turn rel_path into an absolute path, relative to this file."""
     abs_file_dir = os.path.dirname(__file__)
-    return os.path.join(abs_file_dir, rel_path)
+    return os.path.join(os.path.dirname(abs_file_dir), rel_path)
 
 
 def _set_dict_value(dict_: dict, key: str, value: str) -> None:
