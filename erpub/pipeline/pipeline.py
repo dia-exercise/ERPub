@@ -62,6 +62,7 @@ class Pipeline:
         if not verbose:
             logging.disable(logging.INFO)
         self.original_df = Pipeline._load_data(file_dir)
+        self.preprocess_data_fn = preprocess_data_fn
         if preprocess_data_fn:
             logging.info("Data will be preprocessed")
             self.df = preprocess_data_fn(self.original_df.copy())
@@ -170,6 +171,8 @@ class Pipeline:
         with open(
             os.path.join(dir_name, "pipeline_settings.txt"), "w", encoding="utf-8"
         ) as file:
+            if self.preprocess_data_fn:
+                file.write(f"Preprocessing function: {self.preprocess_data_fn.__name__}\n")
             file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
             for attr, f in self.matching_fns.items():
                 file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
