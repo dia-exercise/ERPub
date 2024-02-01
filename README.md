@@ -11,8 +11,6 @@
 </div>
 
 # ERPub
-ERPub is a tool for Entity Resolution of Publication Data.
-
 ERPub is a tool designed for resolving entities across multiple academic publication datasets (specifically ACM and DBLP) by employing various matching functions. This pipeline takes advantage of blocking, matching, and clustering techniques to identify and resolve duplicate entities within the given datasets.
 
 ## Installation
@@ -54,14 +52,11 @@ pipeline = pipeline.Pipeline(
 ```
 ### Running the Pipeline
 ```
-dir_name = "output_directory"
-similarity_threshold = 0.8
-pipeline.run(dir_name, similarity_threshold)
+pipeline.run("output_directory", similarity_threshold=0.8)
 ```
 ### Resolving the Entities
 ```
-resolved_dir_name = "resolved_output_directory"
-pipeline.resolve(resolved_dir_name)
+pipeline.resolve("resolved_output_directory")
 ```
 ### Example setup
 ```
@@ -77,12 +72,9 @@ pipeline = pipeline.Pipeline(
     },
 )
 
-output_dir = "output_directory"
-similarity_threshold = 0.8
-pipeline.run(output_dir, similarity_threshold)
+pipeline.run("output_directory", similarity_threshold=0.8)
 
-resolved_dir = "resolved_output_directory"
-pipeline.resolve(resolved_dir)
+pipeline.resolve("resolved_output_directory")
 ```
 
 ### Note for vector embeddings
