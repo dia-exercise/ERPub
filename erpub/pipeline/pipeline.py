@@ -53,6 +53,8 @@ class Pipeline:
         embeddings_for_matching : str | None, optional
             Path to the embeddings txt file (e.g., "glove.6B.50d.txt") used for matching functions
             requiring embeddings, by default None.
+        verbose : bool, optional
+            Whether to output logging information, by default True
 
         Raises
         ----------
