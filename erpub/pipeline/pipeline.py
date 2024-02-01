@@ -53,6 +53,8 @@ class Pipeline:
         embeddings_for_matching : str | None, optional
             Path to the embeddings txt file (e.g., "glove.6B.50d.txt") used for matching functions
             requiring embeddings, by default None.
+        verbose : bool, optional
+            Whether to output logging information, by default True
 
         Raises
         ----------
@@ -62,6 +64,7 @@ class Pipeline:
         if not verbose:
             logging.disable(logging.INFO)
         self.original_df = Pipeline._load_data(file_dir)
+        self.preprocess_data_fn = preprocess_data_fn
         if preprocess_data_fn:
             logging.info("Data will be preprocessed")
             self.df = preprocess_data_fn(self.original_df.copy())
@@ -156,6 +159,8 @@ class Pipeline:
             Array of size matched_pairs x 2 containing the indices for each pair as a row.
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        similarity_threshold : float
+            Similarity threshold used for matching.
         """
         unique_datasets = self.df.dataset.unique()
         match_ids: list[dict[str, str]] = [
@@ -170,6 +175,8 @@ class Pipeline:
         with open(
             os.path.join(dir_name, "pipeline_settings.txt"), "w", encoding="utf-8"
         ) as file:
+            if self.preprocess_data_fn:
+                file.write(f"Preprocessing function: {self.preprocess_data_fn.__name__}\n")
             file.write(f"Blocking function: {self.blocking_fn.__name__}\n")
             for attr, f in self.matching_fns.items():
                 file.write(f"Matching function for attribute {attr}: {f.__name__}\n")
@@ -316,6 +323,8 @@ class Pipeline:
         ----------
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        similarity_threshold : float
+            Similarity threshold used for matching.
 
         Returns
         ----------
