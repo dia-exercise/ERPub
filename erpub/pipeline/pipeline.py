@@ -159,6 +159,8 @@ class Pipeline:
             Array of size matched_pairs x 2 containing the indices for each pair as a row.
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        similarity_threshold : float
+            Similarity threshold used for matching.
         """
         unique_datasets = self.df.dataset.unique()
         match_ids: list[dict[str, str]] = [
@@ -321,6 +323,8 @@ class Pipeline:
         ----------
         dir_name : str
             Directory path where the matched_entities.csv and pipeline_settings.txt will be placed.
+        similarity_threshold : float
+            Similarity threshold used for matching.
 
         Returns
         ----------
