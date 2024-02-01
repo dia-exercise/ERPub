@@ -163,3 +163,4 @@ cython_debug/
 # project-specific
 data
 embeddings
+experiments

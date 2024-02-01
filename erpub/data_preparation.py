@@ -37,7 +37,7 @@ def download_input(url, target_dir):
 
     logging.info(f"Extracting {target_path}")
     with tarfile.open(target_path, "r") as file:
-        file.extractall(target_dir)
+        file.extractall(abs_target_dir)
 
 
 def read_txt(input_file: str) -> list[dict]:
@@ -155,7 +155,7 @@ def replicate_dataset(input_file: str, target_dir: str, output_file: str, replic
 def _get_abs_path(rel_path: str) -> str:
     """Turn rel_path into an absolute path, relative to this file."""
     abs_file_dir = os.path.dirname(__file__)
-    return os.path.join(abs_file_dir, rel_path)
+    return os.path.join(os.path.dirname(abs_file_dir), rel_path)
 
 
 def _set_dict_value(dict_: dict, key: str, value: str) -> None:

@@ -1,7 +1,11 @@
 import pandas as pd
 import pytest
 
-from erpub.pipeline.blocking import naive_all_pairs, same_year_of_publication, author_names_initials
+from erpub.pipeline.blocking import (
+    author_names_initials,
+    naive_all_pairs,
+    same_year_of_publication,
+)
 
 
 @pytest.fixture
