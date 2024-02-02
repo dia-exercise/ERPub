@@ -85,15 +85,12 @@ class DaskPipeline:
         all_files = glob.glob(os.path.join(file_dir, "*.csv"))
         logging.info(f"The pipeline will be built with these files: {all_files}")
 
-        # Dask's read_csv can handle multiple files, but we need to manually handle the "dataset" column
         dfs = []
         for file in all_files:
             temp_df = dd.read_csv(file).astype(str)
-            # Manually add the "dataset" column to each DataFrame
             temp_df["dataset"] = os.path.basename(file)
             dfs.append(temp_df)
 
-        # Concatenate all DataFrames into one. This operation is lazy in Dask.
         df = dd.concat(dfs, axis=0, ignore_index=True)
 
         logging.info("Loaded csv successfully into Dask dataframe")
@@ -129,20 +126,21 @@ class DaskPipeline:
         "Returns True if the passed match_f requires embedding_table as it's argument, else False"
         return "embedding_table" in inspect.signature(match_f).parameters
 
+    # lambda replacement for dask
     def _extract_match_info(self, index_a, index_b):
-        # Placeholder for your logic to extract match info from the indices
-        # Implement this method based on your specific requirements
-        return {'index_a': index_a, 'index_b': index_b}  # Example return, replace with your logic
+        return {"index_a": index_a, "index_b": index_b}
 
     def _apply_extract_match_info(self, df):
         """Applies _extract_match_info method across DataFrame rows."""
         return df.apply(
             lambda row: self._extract_match_info(row["index_a"], row["index_b"]),
             axis=1,
-            meta=object,  # Ensure meta is specified if the output format is known
+            meta=object,
         )
 
-    def _write_matched_entities_csv(self, matched_pairs: dd.DataFrame, dir_name: str) -> None:
+    def _write_matched_entities_csv(
+        self, matched_pairs: dd.DataFrame, dir_name: str
+    ) -> None:
         """Writes the matched entities to a CSV file.
 
         Parameters
@@ -152,23 +150,19 @@ class DaskPipeline:
         dir_name : str
             Directory path where the matched_entities.csv will be put.
         """
-
         # Ensure the directory exists
         Path(dir_name).mkdir(parents=True, exist_ok=True)
-        
         # Apply the extract match info operation using map_partitions
         matched_info = matched_pairs.map_partitions(
             self._apply_extract_match_info,
             meta=object,
         )
-
         # Compute the Dask DataFrame and write the output to a CSV file
         matched_info.compute().to_csv(
             os.path.join(dir_name, "matched_entities.csv"), index=False
         )
 
-
-    def calculate_attribute_similarities(self) -> dd.DataFrame: 
+    def calculate_attribute_similarities(self) -> dd.DataFrame:
         """
         Calculate similarity scores for each attribute and combine them.
 
@@ -181,7 +175,9 @@ class DaskPipeline:
         similarity_scores = []
 
         for attribute in DEFAULT_ATTRIBUTES:
-            score = self.df[attribute].apply(lambda x: jaccard_similarity(x, attribute), meta=float)
+            score = self.df[attribute].apply(
+                lambda x: jaccard_similarity(x, attribute), meta=float
+            )
             """ score = self.df.map_partitions(
                 lambda partition: match_fn(partition[attribute], partition[attribute]),
                 meta=float,
@@ -299,7 +295,7 @@ class DaskPipeline:
         logging.info(f"Amount of different blocks: {self.df['block'].nunique()}")
 
         sim = self.calculate_attribute_similarities()
-        
+
         aggregated_scores = self.aggregate_similarity_scores(sim)
 
         self.matched_pairs = self.get_matched_pairs(
@@ -308,9 +304,7 @@ class DaskPipeline:
         pipeline_execution_time = time.time() - pipeline_start_time
         logging.info(f"Pipeline executed in {pipeline_execution_time} seconds.")
         logging.info(f"Writing the matched paper_ids to directory {dir_name}")
-        self._write_matched_entities_csv(
-            self.matched_pairs, dir_name
-        )
+        self._write_matched_entities_csv(self.matched_pairs, dir_name)
         return pipeline_execution_time
 
     def resolve(self, dir_name: str) -> None:
