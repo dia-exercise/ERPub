@@ -190,7 +190,7 @@ class DaskPipeline:
 
         return combined_scores
 
-    def aggregate_similarity_scores(self, similarity_scores):
+    def aggregate_similarity_scores(self, similarity_scores: dd.DataFrame) -> dd.Series:
         """
         Aggregate similarity scores across attributes.
 
