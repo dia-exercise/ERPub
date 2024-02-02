@@ -16,8 +16,8 @@ ERPub is a tool designed for resolving entities across multiple academic publica
 ## Installation
 Clone this repository to your local machine and navigate to the project directory:
 ```
-git clone https://github.com/your-username/entity-resolution-pipeline.git
-cd entity-resolution-pipeline
+git clone https://github.com/dia-exercise/ERPub
+cd ERPub
 ```
 
 Install the required dependencies:
