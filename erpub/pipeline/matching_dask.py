@@ -1,18 +1,19 @@
 import numpy as np
 import pandas as pd
+import dask.dataframe as dd
 from sklearn.metrics.pairwise import cosine_similarity
 
 
-def jaccard_similarity(self, a: str, column_series):
+def jaccard_similarity(df: dd.DataFrame, col: str) -> float:
     """Calculate the average Jaccard Similarity for a given attribute."""
 
     def compute_jaccard(b: str):
-        A, B = set(a.split()), set(b.split())
+        A, B = set(col.split()), set(b.split())
         intersection = A.intersection(B)
         union = A.union(B)
         return len(intersection) / len(union) if union else 0
 
-    return column_series.apply(compute_jaccard).mean()
+    return df.apply(compute_jaccard, meta=float, axis=1).mean()
 
 
 def vector_embeddings(
@@ -27,10 +28,10 @@ def vector_embeddings(
 
 
 def _name_to_initials_and_last_name(name: str) -> str:
-    names = name.split()
+    """names = name.split()
     first_name_initial = names[0][0]
     last_name = names[-1]
-    return f"{first_name_initial} {last_name}"
+    return f"{first_name_initial} {last_name}" """
 
 
 def specific_name_matcher_dask(a: str, b: str) -> float:

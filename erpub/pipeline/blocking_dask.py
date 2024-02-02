@@ -1,5 +1,6 @@
 import dask.dataframe as dd
 
+
 def naive_all_pairs_dask(data: dd.DataFrame) -> None:
     """Create n*(n-1)/2 pairs to be compared."""
     data["block"] = 1
@@ -17,7 +18,6 @@ def author_names_initials_dask(data: dd.DataFrame) -> None:
         extract_initials_for_partition, meta=("author_names", "object")
     )
     data["block"] = initials
-    print(data["block"].compute().values)
 
 
 def extract_initials_for_partition(author_names: dd.Series) -> dd.Series:

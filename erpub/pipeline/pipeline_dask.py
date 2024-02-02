@@ -12,6 +12,7 @@ import dask.dataframe as dd
 from dask.distributed import Client
 
 from erpub.pipeline.blocking_dask import naive_all_pairs_dask
+from erpub.pipeline.matching_dask import jaccard_similarity
 
 logging.basicConfig(format="%(asctime)s - %(message)s", level=logging.INFO)
 
@@ -22,7 +23,7 @@ DEFAULT_ATTRIBUTES = [
     "year_of_publication",
 ]
 
-# sorry ist alles ein bisschen zerschossen
+
 class DaskPipeline:
     def __init__(
         self,
@@ -64,7 +65,6 @@ class DaskPipeline:
 
         self.blocking_fn = blocking_fn
         self.matching_fns = matching_fns
-        # self.matched_pairs: dd.DataFrame | None = None
         logging.info("Pipeline initialized")
 
     @staticmethod
@@ -129,10 +129,21 @@ class DaskPipeline:
         "Returns True if the passed match_f requires embedding_table as it's argument, else False"
         return "embedding_table" in inspect.signature(match_f).parameters
 
-    def _write_matched_entities_csv(
-        self, matched_pairs: dd.DataFrame, dir_name: str, similarity_threshold: float
-    ) -> None:
-        """Writes the matched entities to a csv file.
+    def _extract_match_info(self, index_a, index_b):
+        # Placeholder for your logic to extract match info from the indices
+        # Implement this method based on your specific requirements
+        return {'index_a': index_a, 'index_b': index_b}  # Example return, replace with your logic
+
+    def _apply_extract_match_info(self, df):
+        """Applies _extract_match_info method across DataFrame rows."""
+        return df.apply(
+            lambda row: self._extract_match_info(row["index_a"], row["index_b"]),
+            axis=1,
+            meta=object,  # Ensure meta is specified if the output format is known
+        )
+
+    def _write_matched_entities_csv(self, matched_pairs: dd.DataFrame, dir_name: str) -> None:
+        """Writes the matched entities to a CSV file.
 
         Parameters
         ----------
@@ -140,35 +151,24 @@ class DaskPipeline:
             Dask DataFrame containing the matched pairs.
         dir_name : str
             Directory path where the matched_entities.csv will be put.
-        similarity_threshold : float
-            The similarity threshold used for matching.
         """
 
+        # Ensure the directory exists
         Path(dir_name).mkdir(parents=True, exist_ok=True)
+        
+        # Apply the extract match info operation using map_partitions
         matched_info = matched_pairs.map_partitions(
-            lambda df: df.apply(
-                lambda row: self._extract_match_info(row["index_a"], row["index_b"]),
-                axis=1,
-            ),
+            self._apply_extract_match_info,
             meta=object,
         )
+
+        # Compute the Dask DataFrame and write the output to a CSV file
         matched_info.compute().to_csv(
             os.path.join(dir_name, "matched_entities.csv"), index=False
         )
 
-    def calculate_similarity_scores(self):
-        """Calculate Jaccard similarity scores for specified attributes."""
-        for attr in DEFAULT_ATTRIBUTES:
-            logging.info(f"Calculating Jaccard similarities for {attr}")
-            # Apply the jaccard_similarity for each row against all others in the same column
-            self.df[attr + "_jaccard"] = self.df.map_partitions(
-                lambda df: df.apply(
-                    lambda x: self.jaccard_similarity(x[attr], df[attr]), axis=1
-                ),
-                meta="float",
-            )
 
-    def calculate_attribute_similarities(self, match_fn):
+    def calculate_attribute_similarities(self) -> dd.DataFrame: 
         """
         Calculate similarity scores for each attribute and combine them.
 
@@ -181,10 +181,11 @@ class DaskPipeline:
         similarity_scores = []
 
         for attribute in DEFAULT_ATTRIBUTES:
-            score = self.df.map_partitions(
+            score = self.df[attribute].apply(lambda x: jaccard_similarity(x, attribute), meta=float)
+            """ score = self.df.map_partitions(
                 lambda partition: match_fn(partition[attribute], partition[attribute]),
                 meta=float,
-            )
+            ) """
             similarity_scores.append(score)
 
         # Combine scores into a DataFrame
@@ -297,32 +298,18 @@ class DaskPipeline:
         self.blocking_fn(self.df)
         logging.info(f"Amount of different blocks: {self.df['block'].nunique()}")
 
-        for attr in DEFAULT_ATTRIBUTES:
-            logging.info(f"Processing attribute: {attr}")
-            first_entry = self.df[attr].head(1).values[0]
-            self.df[attr + "_similarity"] = self.df.map_partitions(
-                lambda partition: partition.apply(
-                    lambda x: self.jaccard_similarity(x, first_entry)
-                ),
-                meta="float",
-            )
-
-        # Example for aggregating and printing the average similarity score per attribute
-        for attr in DEFAULT_ATTRIBUTES:
-            average_similarity = self.df[attr + "_similarity"].mean().compute()
-            logging.info(f"Average Jaccard similarity for {attr}: {average_similarity}")
-
-        execution_time = time.time() - pipeline_start_time
-        logging.info(f"Pipeline executed in {execution_time} seconds.")
-        aggregated_scores = self.aggregate_similarity_scores(average_similarity)
+        sim = self.calculate_attribute_similarities()
+        
+        aggregated_scores = self.aggregate_similarity_scores(sim)
 
         self.matched_pairs = self.get_matched_pairs(
             aggregated_scores,
         )
         pipeline_execution_time = time.time() - pipeline_start_time
+        logging.info(f"Pipeline executed in {pipeline_execution_time} seconds.")
         logging.info(f"Writing the matched paper_ids to directory {dir_name}")
         self._write_matched_entities_csv(
-            self.matched_pairs, dir_name, similarity_threshold
+            self.matched_pairs, dir_name
         )
         return pipeline_execution_time
 

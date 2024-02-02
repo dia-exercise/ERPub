@@ -36,7 +36,8 @@ def sample_embedding_table():
 
 
 def test_jaccard_similarity(sample_series):
-    assert jaccard_similarity(sample_series, "Foo", sample_series) < 1
+    assert jaccard_similarity(sample_series, "baaa") == 0
+    assert jaccard_similarity(sample_series, "foo") < 0.34
 
 
 def test_vector_embeddings(sample_series, sample_embedding_table):
