@@ -34,7 +34,7 @@ class DaskPipeline:
         blocking_fn: Callable[[dd.DataFrame], None] = naive_all_pairs_dask,
         embeddings_for_matching: str | None = None,
         verbose: bool = True,
-        client: Client = None,
+        client: Client | None = None,
     ):
         self.client = client if client is not None else Client()
         if not verbose:
