@@ -28,7 +28,7 @@ pip install -r requirements.txt
 ## Dataset Preparation
 The pipeline requires datasets in a specific format. To obtain and prepare the required datasets, you can use the provided script:
 ```
-python data_preparation.py
+python erpub/data_preparation.py
 ```
 This script downloads the DBLP and ACM datasets, filters publications published between 1995 and 2004, and removes duplicates. The resulting CSV files `DBLP_1995_2004.csv` and `ACM_1995_2004.csv`) will be stored in the `data/prepared` directory.
 
@@ -80,7 +80,7 @@ pipeline.resolve("resolved_output_directory")
 ### Note for vector embeddings
 For `matching.vector_embeddings`, the `embeddings_path` of `pipeline.Pipeline` parameter is required. In our case we used the [GloVe](https://github.com/stanfordnlp/GloVe), you can download them to the `embeddings/` directory by running this script:
 ```
-python download_glove_embeddings.py
+python erpub/download_glove_embeddings.py
 ``` 
 
 ## Customization
