@@ -188,7 +188,7 @@ if __name__ == "__main__":
     acm_url = "https://lfs.aminer.cn/lab-datasets/citation/citation-acm-v8.txt.tgz"
     download_target_dir = "data/raw"
     prepared_target_dir = "data/prepared"
-    create_replicas = True
+    create_replicas = False
 
     download_input(dblp_url, download_target_dir)
     dblp_blocks = read_txt(f"{download_target_dir}/dblp.txt")
